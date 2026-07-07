@@ -101,6 +101,130 @@ $script:LogFile = $null
 $script:LockStream = $null
 $script:LockFile = $null
 
+function ConvertTo-SafeLogText {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) {
+        return ""
+    }
+
+    $text = [string]$Value
+    $text = $text.Replace([string][char]0, "")
+    $text = [regex]::Replace($text, '\x1B\[[0-?]*[ -/]*[@-~]', "")
+    $text = [regex]::Replace($text, '[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]', " ")
+    $text = $text.Replace("`r", " ").Replace("`n", " ")
+    $text = [regex]::Replace($text, '\s{2,}', " ")
+
+    return $text.Trim()
+}
+
+function Get-ConsoleLineWidth {
+    try {
+        $width = [int]$Host.UI.RawUI.WindowSize.Width
+    }
+    catch {
+        $width = 120
+    }
+
+    if ($width -lt 80) {
+        return 80
+    }
+
+    if ($width -gt 132) {
+        return 132
+    }
+
+    return ($width - 1)
+}
+
+function Split-TextForConsole {
+    param(
+        [AllowNull()]
+        [string]$Text,
+
+        [Parameter(Mandatory)]
+        [int]$Width
+    )
+
+    $safeText = ConvertTo-SafeLogText -Value $Text
+
+    if ([string]::IsNullOrWhiteSpace($safeText)) {
+        return @("")
+    }
+
+    if ($Width -lt 20) {
+        $Width = 20
+    }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $current = ""
+    $words = $safeText -split ' '
+
+    foreach ($word in $words) {
+        if ([string]::IsNullOrWhiteSpace($word)) {
+            continue
+        }
+
+        while ($word.Length -gt $Width) {
+            if (-not [string]::IsNullOrWhiteSpace($current)) {
+                $lines.Add($current)
+                $current = ""
+            }
+
+            $lines.Add($word.Substring(0, $Width))
+            $word = $word.Substring($Width)
+        }
+
+        if ([string]::IsNullOrWhiteSpace($current)) {
+            $current = $word
+        }
+        elseif (($current.Length + 1 + $word.Length) -le $Width) {
+            $current = "$current $word"
+        }
+        else {
+            $lines.Add($current)
+            $current = $word
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+        $lines.Add($current)
+    }
+
+    if ($lines.Count -eq 0) {
+        return @("")
+    }
+
+    return @($lines)
+}
+
+function Get-TextFileLines {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [switch]$Oem
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return @()
+    }
+
+    if ($Oem.IsPresent) {
+        try {
+            return @(Get-Content -LiteralPath $Path -Encoding Oem -ErrorAction Stop)
+        }
+        catch {
+            return @(Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)
+        }
+    }
+
+    return @(Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)
+}
+
 function Write-Status {
     param(
         [Parameter(Mandatory)]
@@ -111,7 +235,15 @@ function Write-Status {
     )
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $line = "[$timestamp] [$Level] $Message"
+    $prefix = "[$timestamp] [$Level]"
+    $width = Get-ConsoleLineWidth
+    $messageWidth = $width - $prefix.Length - 1
+
+    if ($messageWidth -lt 40) {
+        $messageWidth = 40
+    }
+
+    $messageLines = Split-TextForConsole -Text $Message -Width $messageWidth
     $color = @{
         INFO  = "Gray"
         OK    = "Green"
@@ -120,10 +252,16 @@ function Write-Status {
         TITLE = "Cyan"
     }[$Level]
 
-    Write-Host $line -ForegroundColor $color
+    $lines = @()
+
+    foreach ($messageLine in $messageLines) {
+        $line = "$prefix $messageLine"
+        $lines += $line
+        Write-Host $line -ForegroundColor $color
+    }
 
     if ($script:LogFile -and (Test-Path -LiteralPath $script:LogFile)) {
-        Add-Content -LiteralPath $script:LogFile -Value $line -Encoding UTF8
+        Add-Content -LiteralPath $script:LogFile -Value $lines -Encoding UTF8
     }
 }
 
@@ -133,11 +271,22 @@ function Write-Section {
         [string]$Title
     )
 
+    $width = Get-ConsoleLineWidth
+    if ($width -gt 76) {
+        $width = 76
+    }
+
+    $safeTitle = ConvertTo-SafeLogText -Value $Title
+    if ($safeTitle.Length -gt ($width - 1)) {
+        $safeTitle = $safeTitle.Substring(0, [math]::Max(1, $width - 4)) + "..."
+    }
+
+    $bar = "=" * $width
     $lines = @(
         "",
-        "============================================================",
-        " $Title",
-        "============================================================"
+        $bar,
+        " $safeTitle",
+        $bar
     )
 
     Write-Host ""
@@ -348,6 +497,38 @@ function Get-SafeFileName {
     return $safe
 }
 
+function Get-ManagedSha256Hash {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $stream = $null
+    $sha256 = $null
+
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $stream = [System.IO.File]::Open(
+            $Path,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read,
+            [System.IO.FileShare]::Read
+        )
+
+        $bytes = $sha256.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($bytes) -replace "-", "").ToUpperInvariant()
+    }
+    finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+
+        if ($null -ne $sha256) {
+            $sha256.Dispose()
+        }
+    }
+}
+
 function Get-FileHashSafe {
     param(
         [Parameter(Mandatory)]
@@ -359,10 +540,21 @@ function Get-FileHashSafe {
 
     Write-Status -Level "INFO" -Message "Calculando $($Config.HashAlgorithm): $Label"
 
-    return (Get-FileHash `
-        -LiteralPath $Path `
-        -Algorithm $Config.HashAlgorithm `
-        -ErrorAction Stop).Hash
+    $hashCommand = Get-Command -Name "Get-FileHash" -CommandType Cmdlet,Function -ErrorAction SilentlyContinue
+
+    if ($null -ne $hashCommand) {
+        return (& $hashCommand `
+            -LiteralPath $Path `
+            -Algorithm $Config.HashAlgorithm `
+            -ErrorAction Stop).Hash
+    }
+
+    if ($Config.HashAlgorithm -ne "SHA256") {
+        throw "Get-FileHash indisponivel e fallback interno suporta apenas SHA256."
+    }
+
+    Write-Status -Level "WARN" -Message "Get-FileHash indisponivel; usando calculo SHA256 interno via .NET."
+    return Get-ManagedSha256Hash -Path $Path
 }
 
 function Test-TarArchive {
@@ -513,8 +705,8 @@ function Invoke-WslDistroCommand {
 
         return [PSCustomObject]@{
             ExitCode = [int]$exitCode
-            Stdout   = @(Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue)
-            Stderr   = @(Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue)
+            Stdout   = @(Get-TextFileLines -Path $stdoutPath)
+            Stderr   = @(Get-TextFileLines -Path $stderrPath)
         }
     }
     finally {
@@ -1243,16 +1435,16 @@ function Export-WslDistro {
     & wsl.exe --export $Distro.Name $partialTar 1>$exportStdout 2>$exportStderr
     $exportExitCode = $LASTEXITCODE
 
-    foreach ($line in @(Get-Content -LiteralPath $exportStdout -ErrorAction SilentlyContinue)) {
-        $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
+    foreach ($line in @(Get-TextFileLines -Path $exportStdout -Oem)) {
+        $cleanLine = ConvertTo-SafeLogText -Value $line
 
         if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
             Write-Status -Level "INFO" -Message "wsl export: $cleanLine"
         }
     }
 
-    foreach ($line in @(Get-Content -LiteralPath $exportStderr -ErrorAction SilentlyContinue)) {
-        $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
+    foreach ($line in @(Get-TextFileLines -Path $exportStderr -Oem)) {
+        $cleanLine = ConvertTo-SafeLogText -Value $line
 
         if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
             Write-Status -Level "WARN" -Message "wsl export: $cleanLine"

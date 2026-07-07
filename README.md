@@ -65,6 +65,14 @@ Limpe e valide as distros como base de clones, sem publicar backup.
 D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
 ```
 
+### <img src="https://img.shields.io/badge/full-template-0f766e?style=for-the-badge" alt="Full template">
+
+Execute em um clique a rotina mais exigente: primeiro purifica as distros em modo Template e, se tudo passar, roda o backup completo.
+
+```bat
+D:\config_wsl\backup_distro_wsl\backup_all\Executar_Full_Template.cmd
+```
+
 ### <img src="https://img.shields.io/badge/backup-completo-0ea5e9?style=for-the-badge" alt="Backup completo">
 
 Gere backup de distros + `WSL_Drives.vhdx` com exigencia de template.
@@ -83,6 +91,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupM
 | <img src="https://img.shields.io/badge/backup-vhdx-f59e0b" alt="vhdx"> | `Executar_Backup_WSL_Drives_VHDX.cmd` |
 | <img src="https://img.shields.io/badge/saude-leve-22c55e" alt="health"> | `Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly` |
 | <img src="https://img.shields.io/badge/diagnostico-pesado-ef4444" alt="deep health"> | `Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth` |
+| <img src="https://img.shields.io/badge/full-template-0f766e" alt="full template"> | `Executar_Full_Template.cmd` |
 | <img src="https://img.shields.io/badge/template-gate-16a34a" alt="template"> | `Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template` |
 | <img src="https://img.shields.io/badge/retomar-staging-64748b" alt="resume"> | `Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId RUN_ID` |
 

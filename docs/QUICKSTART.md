@@ -51,7 +51,15 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupM
 
 Esse comando purifica as distros e valida o nivel de template, mas nao exporta backup.
 
-## 5. Rodar backup completo
+## 5. Full Template em um clique
+
+```bat
+D:\config_wsl\backup_distro_wsl\backup_all\Executar_Full_Template.cmd
+```
+
+Esse atalho purifica as distros como template e so inicia o backup completo se a primeira etapa for aprovada.
+
+## 6. Rodar backup completo
 
 ```bat
 D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All
