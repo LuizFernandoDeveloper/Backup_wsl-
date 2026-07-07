@@ -94,8 +94,10 @@ D:\config_wsl\backup_distro_wsl\backup_all\launchers\Escolher_Backup_WSL.cmd
 Abra a interface grafica em C#/.NET WPF.
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\launchers\Abrir_Interface_WPF.cmd
+D:\config_wsl\backup_distro_wsl\backup_all\dist\MegaBackupWsl.exe
 ```
+
+O atalho `launchers\Abrir_Interface_WPF.cmd` tambem abre esse `.exe` quando ele ja existe.
 
 ### <img src="https://img.shields.io/badge/seguro-teste-64748b?style=for-the-badge" alt="DryRun">
 
@@ -150,7 +152,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cm
 
 ## Interface WPF
 
-A interface grafica fica em `src\MegaBackupWsl.App` e chama o motor PowerShell em `scripts\Mega_Backup_WSL.ps1`.
+A interface grafica pronta fica em `dist\MegaBackupWsl.exe` e chama o motor PowerShell em `scripts\Mega_Backup_WSL.ps1`.
 
 | Acao | O que faz |
 | --- | --- |
@@ -161,7 +163,7 @@ A interface grafica fica em `src\MegaBackupWsl.App` e chama o motor PowerShell e
 | `Full Template` | Purifica, valida e executa backup completo com `QualityGate Template` |
 
 > [!NOTE]
-> Para compilar o `.exe`, o Windows precisa do .NET 8 SDK. O launcher `launchers\Abrir_Interface_WPF.cmd` detecta se o SDK existe e compila automaticamente quando possivel.
+> O `.exe` pronto em `dist\MegaBackupWsl.exe` foi compilado pela versao rapida em `src\MegaBackupWsl.FastWpf`, usando o `csc.exe` do Windows. O projeto completo em `src\MegaBackupWsl.App` continua disponivel para builds com .NET 8 SDK.
 
 ## Modos E Gates
 
@@ -240,7 +242,10 @@ backup_all
 | Arquivo | Funcao |
 | --- | --- |
 | `scripts\Mega_Backup_WSL.ps1` | Motor principal |
+| `dist\MegaBackupWsl.exe` | Interface grafica pronta para abrir com duplo clique |
 | `src\MegaBackupWsl.App` | Interface grafica C#/.NET WPF |
+| `src\MegaBackupWsl.FastWpf` | Fonte da interface WPF rapida, compilada sem SDK |
+| `scripts\Build-MegaBackupWslFastExe.ps1` | Regera `dist\MegaBackupWsl.exe` com o compilador do Windows |
 | `launchers\Abrir_Interface_WPF.cmd` | Atalho para abrir/compilar a interface |
 | `launchers\Escolher_Backup_WSL.cmd` | Menu interativo |
 | `launchers\Executar_Mega_Backup_WSL.cmd` | Atalho geral |

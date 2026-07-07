@@ -3,8 +3,14 @@ setlocal EnableExtensions
 title Mega Backup WSL - Interface
 
 set "REPO_ROOT=%~dp0.."
+set "FAST_EXE=%REPO_ROOT%\dist\MegaBackupWsl.exe"
 set "PROJECT=%REPO_ROOT%\src\MegaBackupWsl.App\MegaBackupWsl.App.csproj"
 set "EXE=%REPO_ROOT%\src\MegaBackupWsl.App\bin\Release\net8.0-windows\MegaBackupWsl.exe"
+
+if exist "%FAST_EXE%" (
+    start "" "%FAST_EXE%"
+    exit /b 0
+)
 
 if exist "%EXE%" (
     start "" "%EXE%"

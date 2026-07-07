@@ -1,9 +1,21 @@
 # Interface WPF
 
-A interface grafica fica em:
+A interface grafica pronta fica em:
+
+```text
+dist\MegaBackupWsl.exe
+```
+
+O projeto completo em C#/.NET WPF fica em:
 
 ```text
 src\MegaBackupWsl.App
+```
+
+A versao rapida compilada pelo `csc.exe` do Windows fica em:
+
+```text
+src\MegaBackupWsl.FastWpf
 ```
 
 Ela nao substitui o script principal. O app chama:
@@ -15,19 +27,33 @@ scripts\Mega_Backup_WSL.ps1
 ## Abrir
 
 ```bat
+dist\MegaBackupWsl.exe
+```
+
+Ou use o launcher:
+
+```bat
 launchers\Abrir_Interface_WPF.cmd
 ```
 
-Se o `.exe` ainda nao existir, o launcher tenta compilar o projeto.
+Se o `.exe` em `dist` existir, o launcher abre ele direto.
 
 ## Requisito Para Compilar
 
-O Windows precisa do .NET 8 SDK. Apenas o runtime nao compila projetos.
+O `.exe` rapido em `dist` nao exige o .NET 8 SDK para abrir.
+
+Para compilar o projeto completo `src\MegaBackupWsl.App`, o Windows precisa do .NET 8 SDK. Apenas o runtime nao compila projetos.
 
 Verifique com:
 
 ```bat
 dotnet --list-sdks
+```
+
+Para regenerar o `.exe` rapido sem SDK:
+
+```bat
+powershell.exe -ExecutionPolicy RemoteSigned -File scripts\Build-MegaBackupWslFastExe.ps1
 ```
 
 ## Acoes Da Tela

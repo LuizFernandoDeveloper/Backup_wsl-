@@ -1,0 +1,58 @@
+#requires -Version 5.1
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = "Stop"
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$sourcePath = Join-Path $repoRoot "src\MegaBackupWsl.FastWpf\MegaBackupWslFastWpf.cs"
+$distDir = Join-Path $repoRoot "dist"
+$outputPath = Join-Path $distDir "MegaBackupWsl.exe"
+$compiler = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+
+if (-not (Test-Path -LiteralPath $compiler)) {
+    throw "Compilador C# nao encontrado: $compiler"
+}
+
+if (-not (Test-Path -LiteralPath $sourcePath)) {
+    throw "Fonte nao encontrado: $sourcePath"
+}
+
+$references = @(
+    (Join-Path $env:WINDIR "Microsoft.NET\assembly\GAC_MSIL\PresentationFramework\v4.0_4.0.0.0__31bf3856ad364e35\PresentationFramework.dll"),
+    (Join-Path $env:WINDIR "Microsoft.NET\assembly\GAC_64\PresentationCore\v4.0_4.0.0.0__31bf3856ad364e35\PresentationCore.dll"),
+    (Join-Path $env:WINDIR "Microsoft.NET\assembly\GAC_MSIL\WindowsBase\v4.0_4.0.0.0__31bf3856ad364e35\WindowsBase.dll"),
+    (Join-Path $env:WINDIR "Microsoft.NET\assembly\GAC_MSIL\System.Xaml\v4.0_4.0.0.0__b77a5c561934e089\System.Xaml.dll")
+)
+
+foreach ($reference in $references) {
+    if (-not (Test-Path -LiteralPath $reference)) {
+        throw "Referencia WPF nao encontrada: $reference"
+    }
+}
+
+New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+
+$referenceArgs = @(
+    "/reference:System.dll",
+    "/reference:System.Core.dll",
+    "/reference:System.Windows.Forms.dll"
+)
+
+foreach ($reference in $references) {
+    $referenceArgs += "/reference:$reference"
+}
+
+& $compiler `
+    /nologo `
+    /target:winexe `
+    /platform:x64 `
+    "/out:$outputPath" `
+    @referenceArgs `
+    $sourcePath
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Falha ao compilar MegaBackupWsl.exe. Codigo: $LASTEXITCODE"
+}
+
+Get-Item -LiteralPath $outputPath
