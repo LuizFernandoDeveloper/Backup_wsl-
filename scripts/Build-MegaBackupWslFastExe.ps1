@@ -5,7 +5,7 @@ param()
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$sourcePath = Join-Path $repoRoot "src\MegaBackupWsl.FastWpf\MegaBackupWslFastWpf.cs"
+$sourceDir = Join-Path $repoRoot "src\MegaBackupWsl.FastWpf"
 $distDir = Join-Path $repoRoot "dist"
 $outputPath = Join-Path $distDir "MegaBackupWsl.exe"
 $iconPath = Join-Path $repoRoot "assets\mega-backup-wsl.ico"
@@ -15,8 +15,18 @@ if (-not (Test-Path -LiteralPath $compiler)) {
     throw "Compilador C# nao encontrado: $compiler"
 }
 
-if (-not (Test-Path -LiteralPath $sourcePath)) {
-    throw "Fonte nao encontrado: $sourcePath"
+if (-not (Test-Path -LiteralPath $sourceDir)) {
+    throw "Diretorio fonte nao encontrado: $sourceDir"
+}
+
+$sourceFiles = @(
+    Get-ChildItem -LiteralPath $sourceDir -Filter "*.cs" -File |
+        Sort-Object FullName |
+        Select-Object -ExpandProperty FullName
+)
+
+if ($sourceFiles.Count -eq 0) {
+    throw "Nenhum fonte C# encontrado em: $sourceDir"
 }
 
 $references = @(
@@ -56,7 +66,7 @@ if (Test-Path -LiteralPath $iconPath) {
     "/out:$outputPath" `
     @iconArgs `
     @referenceArgs `
-    $sourcePath
+    @sourceFiles
 
 if ($LASTEXITCODE -ne 0) {
     throw "Falha ao compilar MegaBackupWsl.exe. Codigo: $LASTEXITCODE"
