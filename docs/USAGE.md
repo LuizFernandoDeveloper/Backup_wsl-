@@ -11,9 +11,9 @@
 Exemplos:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros
-Executar_Mega_Backup_WSL.cmd -BackupMode Vhdx
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Vhdx
 ```
 
 ## Parametros Mais Usados
@@ -51,13 +51,13 @@ Isso evita misturar backups emergenciais, normais e templates. A retencao de `-K
 Para organizar backups antigos ja publicados sem executar backup novo:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -OrganizeRuns
+launchers\Executar_Mega_Backup_WSL.cmd -OrganizeRuns
 ```
 
 Para simular antes de mover:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -OrganizeRuns -DryRun
+launchers\Executar_Mega_Backup_WSL.cmd -OrganizeRuns -DryRun
 ```
 
 ## Exemplos Prontos
@@ -65,31 +65,31 @@ Executar_Mega_Backup_WSL.cmd -OrganizeRuns -DryRun
 Backup completo normal:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Standard
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Standard
 ```
 
 Backup completo como template:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
 ```
 
 Somente VHDX extra:
 
 ```bat
-Executar_Backup_WSL_Drives_VHDX.cmd
+launchers\Executar_Backup_WSL_Drives_VHDX.cmd
 ```
 
 Retomar uma execucao:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId 20260707_130726_771
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId 20260707_130726_771
 ```
 
 Incluir Docker:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -IncludeDocker
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -IncludeDocker
 ```
 
 Voltar ao [indice da documentacao](README.md).

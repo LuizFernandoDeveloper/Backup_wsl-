@@ -4,8 +4,8 @@ title Mega Backup WSL - Full Template
 
 chcp 65001 >nul 2>nul
 
-set "SCRIPT_DIR=%~dp0"
-set "SCRIPT=%SCRIPT_DIR%Mega_Backup_WSL.ps1"
+set "REPO_ROOT=%~dp0.."
+set "SCRIPT=%REPO_ROOT%\scripts\Mega_Backup_WSL.ps1"
 
 if not exist "%SCRIPT%" (
     echo.
@@ -16,11 +16,11 @@ if not exist "%SCRIPT%" (
     exit /b 1
 )
 
-pushd "%SCRIPT_DIR%" >nul 2>nul
+pushd "%REPO_ROOT%" >nul 2>nul
 if errorlevel 1 (
     echo.
     echo [ERRO] Nao foi possivel abrir a pasta do script:
-    echo %SCRIPT_DIR%
+    echo %REPO_ROOT%
     echo.
     pause
     exit /b 1

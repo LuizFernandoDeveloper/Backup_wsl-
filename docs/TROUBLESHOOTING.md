@@ -7,7 +7,7 @@ Motivo: a distro tinha sockets temporarios, geralmente em `/tmp` ou agente SSH.
 Solucao recomendada:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
 ```
 
 Depois rode o backup novamente.
@@ -23,7 +23,7 @@ F:\Backup\WSl_backup\_staging\RUN_ID.partial
 Retome:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId RUN_ID
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId RUN_ID
 ```
 
 ## Distro Reprovou Como Template
@@ -31,7 +31,7 @@ Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId RUN_ID
 Rode:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
 ```
 
 Se ainda reprovar, leia o log em:
@@ -54,7 +54,7 @@ Procure por:
 Altere destino ou reserva minima:
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupRoot "E:\Backups\WSL" -MinimumFreeSpaceGB 50
+launchers\Executar_Mega_Backup_WSL.cmd -BackupRoot "E:\Backups\WSL" -MinimumFreeSpaceGB 50
 ```
 
 ## ExecutionPolicy

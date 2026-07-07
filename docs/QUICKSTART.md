@@ -3,7 +3,7 @@
 ## 1. Abrir o menu
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Escolher_Backup_WSL.cmd
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Escolher_Backup_WSL.cmd
 ```
 
 Opcoes principais:
@@ -25,7 +25,7 @@ A. Organizar diretorios de backup ja publicados
 ## 2. Testar sem copiar
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All -DryRun
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -DryRun
 ```
 
 O `DryRun` valida comandos, destino, espaco livre, distros encontradas e VHDX extra. Ele nao exporta TAR e nao copia VHDX.
@@ -35,19 +35,19 @@ O `DryRun` valida comandos, destino, espaco livre, distros encontradas e VHDX ex
 Saude leve:
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly
 ```
 
 Diagnostico pesado:
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth
 ```
 
 ## 4. Preparar distros para template
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
 ```
 
 Esse comando purifica as distros e valida o nivel de template, mas nao exporta backup.
@@ -55,7 +55,7 @@ Esse comando purifica as distros e valida o nivel de template, mas nao exporta b
 ## 5. Full Template em um clique
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Full_Template.cmd
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Full_Template.cmd
 ```
 
 Esse atalho purifica as distros como template e so inicia o backup completo se a primeira etapa for aprovada.
@@ -63,13 +63,13 @@ Esse atalho purifica as distros como template e so inicia o backup completo se a
 ## 6. Rodar backup completo
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All
 ```
 
 Para exigir qualidade de template:
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
 ```
 
 Voltar ao [indice da documentacao](README.md).

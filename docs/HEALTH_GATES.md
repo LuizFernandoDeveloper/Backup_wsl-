@@ -15,7 +15,7 @@ Verifica:
 - sockets temporarios em `/tmp`, `/var/tmp` e agentes SSH.
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly
 ```
 
 ## Diagnostico Pesado
@@ -32,7 +32,7 @@ Verifica tambem:
 - maiores diretorios e caches.
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth
 ```
 
 ## Niveis De Exigencia
@@ -46,7 +46,7 @@ Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth
 ## Purificacao De Template
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
 ```
 
 Esse modo:
@@ -60,7 +60,7 @@ Esse modo:
 ## Backup Com Gate De Template
 
 ```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
+launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
 ```
 
 Nesse modo, o backup real so exporta se a purificacao e o diagnostico passarem.

@@ -85,7 +85,7 @@ flowchart LR
 Abra o menu interativo e escolha o tipo de backup.
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Escolher_Backup_WSL.cmd
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Escolher_Backup_WSL.cmd
 ```
 
 ### <img src="https://img.shields.io/badge/seguro-teste-64748b?style=for-the-badge" alt="DryRun">
@@ -93,7 +93,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\Escolher_Backup_WSL.cmd
 Valide tudo sem exportar distros nem copiar o VHDX.
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All -DryRun
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -DryRun
 ```
 
 ### <img src="https://img.shields.io/badge/template-purificar-16a34a?style=for-the-badge" alt="Purify template">
@@ -101,7 +101,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupM
 Limpe e valide as distros como base de clones, sem publicar backup.
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
 ```
 
 ### <img src="https://img.shields.io/badge/full-template-0f766e?style=for-the-badge" alt="Full template">
@@ -109,7 +109,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupM
 Execute em um clique a rotina mais exigente: primeiro purifica as distros em modo Template e, se tudo passar, roda o backup completo.
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Full_Template.cmd
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Full_Template.cmd
 ```
 
 ### <img src="https://img.shields.io/badge/backup-completo-0ea5e9?style=for-the-badge" alt="Backup completo">
@@ -117,23 +117,23 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Full_Template.cmd
 Gere backup de distros + `WSL_Drives.vhdx` com exigencia de template.
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
 ```
 
 ## Comandos Principais
 
 | Objetivo | Comando |
 | --- | --- |
-| <img src="https://img.shields.io/badge/menu-interativo-2bd8ff" alt="menu"> | `Escolher_Backup_WSL.cmd` |
-| <img src="https://img.shields.io/badge/backup-all-0ea5e9" alt="all"> | `Executar_Mega_Backup_WSL.cmd -BackupMode All` |
-| <img src="https://img.shields.io/badge/backup-distros-6366f1" alt="distros"> | `Executar_Mega_Backup_WSL.cmd -BackupMode Distros` |
-| <img src="https://img.shields.io/badge/backup-vhdx-f59e0b" alt="vhdx"> | `Executar_Backup_WSL_Drives_VHDX.cmd` |
-| <img src="https://img.shields.io/badge/saude-leve-22c55e" alt="health"> | `Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly` |
-| <img src="https://img.shields.io/badge/diagnostico-pesado-ef4444" alt="deep health"> | `Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth` |
-| <img src="https://img.shields.io/badge/full-template-0f766e" alt="full template"> | `Executar_Full_Template.cmd` |
-| <img src="https://img.shields.io/badge/template-gate-16a34a" alt="template"> | `Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template` |
-| <img src="https://img.shields.io/badge/organizar-runs-a855f7" alt="organizar"> | `Executar_Mega_Backup_WSL.cmd -OrganizeRuns` |
-| <img src="https://img.shields.io/badge/retomar-staging-64748b" alt="resume"> | `Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId RUN_ID` |
+| <img src="https://img.shields.io/badge/menu-interativo-2bd8ff" alt="menu"> | `launchers\Escolher_Backup_WSL.cmd` |
+| <img src="https://img.shields.io/badge/backup-all-0ea5e9" alt="all"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All` |
+| <img src="https://img.shields.io/badge/backup-distros-6366f1" alt="distros"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros` |
+| <img src="https://img.shields.io/badge/backup-vhdx-f59e0b" alt="vhdx"> | `launchers\Executar_Backup_WSL_Drives_VHDX.cmd` |
+| <img src="https://img.shields.io/badge/saude-leve-22c55e" alt="health"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly` |
+| <img src="https://img.shields.io/badge/diagnostico-pesado-ef4444" alt="deep health"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth` |
+| <img src="https://img.shields.io/badge/full-template-0f766e" alt="full template"> | `launchers\Executar_Full_Template.cmd` |
+| <img src="https://img.shields.io/badge/template-gate-16a34a" alt="template"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template` |
+| <img src="https://img.shields.io/badge/organizar-runs-a855f7" alt="organizar"> | `launchers\Executar_Mega_Backup_WSL.cmd -OrganizeRuns` |
+| <img src="https://img.shields.io/badge/retomar-staging-64748b" alt="resume"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId RUN_ID` |
 
 > [!TIP]
 > Use `-PurifyOnly -QualityGate Template` antes de criar uma distro-template importante. Ele remove sockets temporarios, tenta limpar journal antigo, roda diagnostico pesado e para sem exportar.
@@ -169,7 +169,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupM
 
 ## Estrutura Do Backup
 
-Use `Executar_Mega_Backup_WSL.cmd -OrganizeRuns` para mover backups antigos ja publicados para a estrutura por qualidade, sem exportar distros e sem copiar VHDX.
+Use `launchers\Executar_Mega_Backup_WSL.cmd -OrganizeRuns` para mover backups antigos ja publicados para a estrutura por qualidade, sem exportar distros e sem copiar VHDX.
 
 ```text
 F:\Backup\WSl_backup
@@ -200,13 +200,23 @@ F:\Backup\WSl_backup
 
 ## Arquivos Do Projeto
 
+```text
+backup_all
+|-- assets
+|-- docs
+|-- launchers
+|-- scripts
+|-- LICENSE
+`-- README.md
+```
+
 | Arquivo | Funcao |
 | --- | --- |
-| `Mega_Backup_WSL.ps1` | Motor principal |
-| `Escolher_Backup_WSL.cmd` | Menu interativo |
-| `Executar_Mega_Backup_WSL.cmd` | Atalho geral |
-| `Executar_Full_Template.cmd` | Atalho maximo: purifica como template e depois roda backup completo |
-| `Executar_Backup_WSL_Drives_VHDX.cmd` | Atalho para VHDX |
+| `scripts\Mega_Backup_WSL.ps1` | Motor principal |
+| `launchers\Escolher_Backup_WSL.cmd` | Menu interativo |
+| `launchers\Executar_Mega_Backup_WSL.cmd` | Atalho geral |
+| `launchers\Executar_Full_Template.cmd` | Atalho maximo: purifica como template e depois roda backup completo |
+| `launchers\Executar_Backup_WSL_Drives_VHDX.cmd` | Atalho para VHDX |
 | `docs/` | Guias por topico |
 | `assets/` | Imagens do README |
 

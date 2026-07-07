@@ -2,12 +2,23 @@
 setlocal EnableExtensions
 title Mega Backup WSL - Seguro
 
-set "SCRIPT=%~dp0Mega_Backup_WSL.ps1"
+set "REPO_ROOT=%~dp0.."
+set "SCRIPT=%REPO_ROOT%\scripts\Mega_Backup_WSL.ps1"
 
 if not exist "%SCRIPT%" (
     echo.
     echo [ERRO] Arquivo nao encontrado:
     echo %SCRIPT%
+    echo.
+    pause
+    exit /b 1
+)
+
+pushd "%REPO_ROOT%" >nul 2>nul
+if errorlevel 1 (
+    echo.
+    echo [ERRO] Nao foi possivel abrir a pasta do projeto:
+    echo %REPO_ROOT%
     echo.
     pause
     exit /b 1
@@ -37,4 +48,5 @@ echo ============================================================
 echo.
 pause
 
+popd >nul
 exit /b %EXIT_CODE%
