@@ -19,6 +19,7 @@
 <p align="center">
   <a href="#inicio-rapido">Inicio rapido</a> ·
   <a href="#comandos-principais">Comandos</a> ·
+  <a href="#experiencia-do-terminal">Terminal</a> ·
   <a href="#documentacao">Documentacao</a> ·
   <a href="#estrutura-do-backup">Estrutura</a> ·
   <a href="#licenca">Licenca</a>
@@ -38,6 +39,44 @@
 
 > [!IMPORTANT]
 > O script executa `wsl.exe --shutdown` durante backups reais. Feche terminais, editores e servicos dentro das distros antes de iniciar.
+
+## Experiencia Do Terminal
+
+O terminal foi tratado como uma interface de operacao: cada linha precisa dizer o que esta acontecendo, qual o nivel de risco e qual proximo passo fica seguro. A saida evita blocos soltos, quebra mensagens longas e usa estados consistentes para facilitar leitura em execucoes longas.
+
+Imagem demonstrativa do fluxo de operacao:
+
+```mermaid
+flowchart LR
+    A["DryRun<br/>pre-validacao"] --> B["Inventario<br/>distros + VHDX"]
+    B --> C{"QualityGate"}
+    C -->|"Basic"| D["Backup<br/>emergencial"]
+    C -->|"Standard"| E["Backup<br/>normal"]
+    C -->|"Template"| F["Purificar<br/>diagnostico pesado"]
+    F --> G{"Saude<br/>aprovada?"}
+    G -->|"Sim"| H["Exportar TAR<br/>copiar VHDX"]
+    G -->|"Nao"| I["Parar<br/>log acionavel"]
+    H --> J["Manifesto<br/>SHA-256<br/>LATEST"]
+
+    classDef ok fill:#dcfce7,stroke:#16a34a,color:#052e16;
+    classDef warn fill:#fef9c3,stroke:#ca8a04,color:#422006;
+    classDef info fill:#dbeafe,stroke:#2563eb,color:#172554;
+    classDef stop fill:#fee2e2,stroke:#dc2626,color:#450a0a;
+    class A,B,D,E info;
+    class H,J ok;
+    class C,F,G warn;
+    class I stop;
+```
+
+| Estado | Cor esperada | Como ler |
+| --- | --- | --- |
+| `[INFO]` | Neutro | Contexto, inventario, estimativas e passos em andamento |
+| `[OK]` | Verde | Etapa concluida e validada |
+| `[WARN]` | Amarelo | Algo merece atencao, mas o script ainda pode continuar |
+| `[ERROR]` | Vermelho | Parada segura; veja o log antes de tentar novamente |
+
+> [!NOTE]
+> Esta UX se espelha no [CLI Guidelines](https://clig.dev/) para clareza, robustez e saida humana, e na documentacao do [Write-Host](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/write-host?view=powershell-7.6) para exibicao controlada com cores no PowerShell.
 
 ## Inicio Rapido
 
@@ -154,9 +193,22 @@ F:\Backup\WSl_backup
 | `Mega_Backup_WSL.ps1` | Motor principal |
 | `Escolher_Backup_WSL.cmd` | Menu interativo |
 | `Executar_Mega_Backup_WSL.cmd` | Atalho geral |
+| `Executar_Full_Template.cmd` | Atalho maximo: purifica como template e depois roda backup completo |
 | `Executar_Backup_WSL_Drives_VHDX.cmd` | Atalho para VHDX |
 | `docs/` | Guias por topico |
 | `assets/` | Imagens do README |
+
+## Disciplina De Commits
+
+O projeto adota uma disciplina inspirada no Fabio Akita: commits pequenos, uma coisa por commit, stage explicito por arquivo e revisao do diff antes de gravar. Quando uma alteracao mistura assuntos, ela deve ser separada com `git add -p`, `git add -i` ou commits independentes.
+
+```bat
+git status
+git diff
+git add README.md
+git diff --staged
+git commit -m "docs: improve readme terminal guidance"
+```
 
 ## Referencias
 
@@ -164,6 +216,12 @@ F:\Backup\WSl_backup
 - [FAQ about WSL](https://learn.microsoft.com/en-us/windows/wsl/faq)
 - [How to manage WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space)
 - [Troubleshooting WSL](https://learn.microsoft.com/en-us/windows/wsl/troubleshooting)
+- [CLI Guidelines](https://clig.dev/)
+- [Write-Host - Microsoft Learn](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/write-host?view=powershell-7.6)
+- [About READMEs - GitHub Docs](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes)
+- [Readme Best Practices](https://github.com/jehna/readme-best-practices)
+- [Best Practices for README files](https://utrechtuniversity.github.io/workshop-computational-reproducibility/chapters/readme-files.html)
+- [Akitando #71 - Usando Git Direito](https://akitaonrails.com/2020/02/12/akitando-71-usando-git-direito-limpando-seus-commits/)
 
 ## Licenca
 
