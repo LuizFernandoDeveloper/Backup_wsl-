@@ -20,6 +20,7 @@
   <a href="#inicio-rapido">Inicio rapido</a> ·
   <a href="#comandos-principais">Comandos</a> ·
   <a href="#experiencia-do-terminal">Terminal</a> ·
+  <a href="#interface-wpf">Interface</a> ·
   <a href="#documentacao">Documentacao</a> ·
   <a href="#estrutura-do-backup">Estrutura</a> ·
   <a href="#licenca">Licenca</a>
@@ -88,6 +89,14 @@ Abra o menu interativo e escolha o tipo de backup.
 D:\config_wsl\backup_distro_wsl\backup_all\launchers\Escolher_Backup_WSL.cmd
 ```
 
+### <img src="https://img.shields.io/badge/interface-wpf-0f766e?style=for-the-badge" alt="Interface WPF">
+
+Abra a interface grafica em C#/.NET WPF.
+
+```bat
+D:\config_wsl\backup_distro_wsl\backup_all\launchers\Abrir_Interface_WPF.cmd
+```
+
 ### <img src="https://img.shields.io/badge/seguro-teste-64748b?style=for-the-badge" alt="DryRun">
 
 Valide tudo sem exportar distros nem copiar o VHDX.
@@ -124,6 +133,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cm
 
 | Objetivo | Comando |
 | --- | --- |
+| <img src="https://img.shields.io/badge/interface-wpf-0f766e" alt="interface"> | `launchers\Abrir_Interface_WPF.cmd` |
 | <img src="https://img.shields.io/badge/menu-interativo-2bd8ff" alt="menu"> | `launchers\Escolher_Backup_WSL.cmd` |
 | <img src="https://img.shields.io/badge/backup-all-0ea5e9" alt="all"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode All` |
 | <img src="https://img.shields.io/badge/backup-distros-6366f1" alt="distros"> | `launchers\Executar_Mega_Backup_WSL.cmd -BackupMode Distros` |
@@ -137,6 +147,21 @@ D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cm
 
 > [!TIP]
 > Use `-PurifyOnly -QualityGate Template` antes de criar uma distro-template importante. Ele remove sockets temporarios, tenta limpar journal antigo, roda diagnostico pesado e para sem exportar.
+
+## Interface WPF
+
+A interface grafica fica em `src\MegaBackupWsl.App` e chama o motor PowerShell em `scripts\Mega_Backup_WSL.ps1`.
+
+| Acao | O que faz |
+| --- | --- |
+| `Simular Organizacao` | Mostra como os backups publicados seriam separados por qualidade |
+| `Organizar Diretorios` | Move backups antigos para `Runs\Basic`, `Runs\Standard` e `Runs\Template` |
+| `DryRun Completo` | Valida configuracao sem exportar distro nem copiar VHDX |
+| `Saude Das Distros` | Executa diagnostico das distros |
+| `Full Template` | Purifica, valida e executa backup completo com `QualityGate Template` |
+
+> [!NOTE]
+> Para compilar o `.exe`, o Windows precisa do .NET 8 SDK. O launcher `launchers\Abrir_Interface_WPF.cmd` detecta se o SDK existe e compila automaticamente quando possivel.
 
 ## Modos E Gates
 
@@ -163,6 +188,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cm
 | Primeira execucao | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | Parametros e exemplos | [docs/USAGE.md](docs/USAGE.md) |
 | Health gates e templates | [docs/HEALTH_GATES.md](docs/HEALTH_GATES.md) |
+| Interface grafica | [docs/INTERFACE_WPF.md](docs/INTERFACE_WPF.md) |
 | Restauracao e clones | [docs/RESTORE.md](docs/RESTORE.md) |
 | Arquitetura e retomada | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Erros comuns | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
@@ -205,6 +231,7 @@ backup_all
 |-- assets
 |-- docs
 |-- launchers
+|-- src
 |-- scripts
 |-- LICENSE
 `-- README.md
@@ -213,6 +240,8 @@ backup_all
 | Arquivo | Funcao |
 | --- | --- |
 | `scripts\Mega_Backup_WSL.ps1` | Motor principal |
+| `src\MegaBackupWsl.App` | Interface grafica C#/.NET WPF |
+| `launchers\Abrir_Interface_WPF.cmd` | Atalho para abrir/compilar a interface |
 | `launchers\Escolher_Backup_WSL.cmd` | Menu interativo |
 | `launchers\Executar_Mega_Backup_WSL.cmd` | Atalho geral |
 | `launchers\Executar_Full_Template.cmd` | Atalho maximo: purifica como template e depois roda backup completo |
