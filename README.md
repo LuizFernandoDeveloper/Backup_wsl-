@@ -154,12 +154,25 @@ D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cm
 
 A interface grafica pronta fica em `dist\MegaBackupWsl.exe` e chama o motor PowerShell em `scripts\Mega_Backup_WSL.ps1`.
 
+<p align="center">
+  <img src="assets/interface-wpf-saude.png" alt="Interface WPF do Mega Backup WSL com graficos de saude das distros" width="100%">
+  <br>
+  <sub>Preview da aba Saude com dados demonstrativos.</sub>
+</p>
+
+Ela abre com duas abas principais:
+
+| Aba | Conteudo |
+| --- | --- |
+| `Saude` | Graficos por distro para uso do disco, uso de inodes e risco de template |
+| `Log` | Saida completa do PowerShell em tempo real |
+
 | Acao | O que faz |
 | --- | --- |
 | `Simular Organizacao` | Mostra como os backups publicados seriam separados por qualidade |
 | `Organizar Diretorios` | Move backups antigos para `Runs\Basic`, `Runs\Standard` e `Runs\Template` |
 | `DryRun Completo` | Valida configuracao sem exportar distro nem copiar VHDX |
-| `Saude Das Distros` | Executa diagnostico das distros |
+| `Saude Das Distros` | Executa diagnostico das distros e atualiza os graficos |
 | `Full Template` | Purifica, valida e executa backup completo com `QualityGate Template` |
 
 > [!NOTE]

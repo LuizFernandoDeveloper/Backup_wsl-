@@ -38,6 +38,13 @@ launchers\Abrir_Interface_WPF.cmd
 
 Se o `.exe` em `dist` existir, o launcher abre ele direto.
 
+## Abas
+
+| Aba | Conteudo |
+| --- | --- |
+| Saude | Graficos por distro para uso do disco, uso de inodes e risco de template |
+| Log | Saida completa do PowerShell em tempo real |
+
 ## Requisito Para Compilar
 
 O `.exe` rapido em `dist` nao exige o .NET 8 SDK para abrir.
@@ -63,7 +70,7 @@ powershell.exe -ExecutionPolicy RemoteSigned -File scripts\Build-MegaBackupWslFa
 | Simular Organizacao | `-OrganizeRuns -DryRun` |
 | Organizar Diretorios | `-OrganizeRuns` |
 | DryRun Completo | `-BackupMode MODO -QualityGate GATE -DryRun` |
-| Saude Das Distros | `-BackupMode Distros -HealthOnly` |
+| Saude Das Distros | `-BackupMode Distros -HealthOnly`, preenchendo a aba Saude |
 | Full Template | `-BackupMode Distros -PurifyOnly -QualityGate Template` e depois `-BackupMode All -QualityGate Template` |
 
 ## Segurança
