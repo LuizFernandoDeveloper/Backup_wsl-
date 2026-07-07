@@ -293,10 +293,10 @@ namespace MegaBackupWsl.FastWpf
                 Margin = new Thickness(0, 0, 0, 12)
             });
 
-            AddActionButton(stack, "Simular Organizacao", false, delegate { RunSingle("Simular organizacao", Args("-OrganizeRuns", "-DryRun")); });
-            AddActionButton(stack, "Organizar Diretorios", true, delegate { RunSingle("Organizar diretorios", Args("-OrganizeRuns")); });
+            AddActionButton(stack, "Simular Organizacao", false, delegate { RunSingle("Simular organizacao", BuildScriptArgs("-OrganizeRuns", "-DryRun")); });
+            AddActionButton(stack, "Organizar Diretorios", true, delegate { RunSingle("Organizar diretorios", BuildScriptArgs("-OrganizeRuns")); });
             stack.Children.Add(new Separator { Margin = new Thickness(0, 6, 0, 14) });
-            AddActionButton(stack, "DryRun Completo", false, delegate { RunSingle("DryRun completo", Args("-BackupMode", Selected(_backupModeComboBox), "-QualityGate", Selected(_qualityGateComboBox), "-DryRun")); });
+            AddActionButton(stack, "DryRun Completo", false, delegate { RunSingle("DryRun completo", BuildScriptArgs("-BackupMode", Selected(_backupModeComboBox), "-QualityGate", Selected(_qualityGateComboBox), "-DryRun")); });
             AddActionButton(stack, "Saude Das Distros", false, delegate { RunHealthDiagnostics(); });
             AddActionButton(stack, "Full Template", true, delegate { RunFullTemplate(); });
             stack.Children.Add(new Separator { Margin = new Thickness(0, 6, 0, 14) });
@@ -946,7 +946,7 @@ namespace MegaBackupWsl.FastWpf
                 _mainTabs.SelectedIndex = 0;
             }
 
-            RunSingle("Saude das distros", Args("-BackupMode", "Distros", "-QualityGate", Selected(_qualityGateComboBox), "-HealthOnly", "-UiEvents"));
+            RunSingle("Saude das distros", BuildScriptArgs("-BackupMode", "Distros", "-QualityGate", Selected(_qualityGateComboBox), "-HealthOnly", "-UiEvents"));
         }
 
         private void RunSingle(string title, List<string> args)
@@ -995,7 +995,7 @@ namespace MegaBackupWsl.FastWpf
             {
                 try
                 {
-                    var purifyExit = RunPowerShell(Args("-BackupMode", "Distros", "-PurifyOnly", "-QualityGate", "Template", "-UiEvents"));
+                    var purifyExit = RunPowerShell(BuildScriptArgs("-BackupMode", "Distros", "-PurifyOnly", "-QualityGate", "Template", "-UiEvents"));
 
                     if (purifyExit != 0)
                     {
@@ -1006,7 +1006,7 @@ namespace MegaBackupWsl.FastWpf
 
                     AppendLog("");
                     AppendLog("Purificacao aprovada. Iniciando backup completo Template...");
-                    var backupExit = RunPowerShell(Args("-BackupMode", "All", "-QualityGate", "Template"));
+                    var backupExit = RunPowerShell(BuildScriptArgs("-BackupMode", "All", "-QualityGate", "Template"));
                     Dispatcher.Invoke(delegate { SetBusy(false, backupExit == 0 ? "Concluido" : "Falhou: " + backupExit); });
                 }
                 catch (Exception ex)
@@ -1036,25 +1036,17 @@ namespace MegaBackupWsl.FastWpf
             return true;
         }
 
-        private List<string> Args(params string[] args)
+        private List<string> BuildScriptArgs(params string[] args)
         {
-            var result = new List<string>(args);
-            result.Add("-BackupRoot");
-            result.Add(_backupRootTextBox.Text.Trim());
-
-            var sourceVhdx = _sourceVhdxTextBox.Text.Trim();
-            if (!string.IsNullOrWhiteSpace(sourceVhdx))
-            {
-                result.Add("-SourceVhdx");
-                result.Add(sourceVhdx);
-            }
-
-            return result;
+            return BackupScriptCommand.WithCommonOptions(
+                _backupRootTextBox.Text,
+                _sourceVhdxTextBox.Text,
+                args);
         }
 
         private int RunPowerShell(List<string> args)
         {
-            AppendLog("Comando: powershell.exe -File \"" + _scriptPath + "\" " + FormatArgs(args));
+            AppendLog("Comando: " + BackupScriptCommand.ToLogText(_scriptPath, args));
 
             var startInfo = new ProcessStartInfo
             {
@@ -1068,10 +1060,7 @@ namespace MegaBackupWsl.FastWpf
                 StandardErrorEncoding = Encoding.UTF8
             };
 
-            startInfo.Arguments =
-                "-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File " +
-                Quote(_scriptPath) + " " +
-                FormatArgs(args);
+            startInfo.Arguments = BackupScriptCommand.ToPowerShellArguments(_scriptPath, args);
 
             using (var process = new Process())
             {
@@ -1186,23 +1175,6 @@ namespace MegaBackupWsl.FastWpf
             }
 
             return string.Empty;
-        }
-
-        private static string FormatArgs(IEnumerable<string> args)
-        {
-            return string.Join(" ", args.Select(Quote).ToArray());
-        }
-
-        private static string Quote(string arg)
-        {
-            if (arg == null)
-            {
-                return "\"\"";
-            }
-
-            return arg.IndexOfAny(new[] { ' ', '\t', '"' }) >= 0
-                ? "\"" + arg.Replace("\"", "\\\"") + "\""
-                : arg;
         }
 
         private static SolidColorBrush Brush(string color)
