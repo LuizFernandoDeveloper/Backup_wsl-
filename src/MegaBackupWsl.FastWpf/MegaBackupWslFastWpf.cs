@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,7 +15,7 @@ namespace MegaBackupWsl.FastWpf
     {
         private string _repoRoot;
         private string _scriptPath;
-        private Process _runningProcess;
+        private readonly PowerShellBackupRunner _runner = new PowerShellBackupRunner();
         private TextBox _backupRootTextBox;
         private TextBox _sourceVhdxTextBox;
         private ComboBox _backupModeComboBox;
@@ -1046,60 +1044,14 @@ namespace MegaBackupWsl.FastWpf
 
         private int RunPowerShell(List<string> args)
         {
-            AppendLog("Comando: " + BackupScriptCommand.ToLogText(_scriptPath, args));
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                WorkingDirectory = _repoRoot,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
-            };
-
-            startInfo.Arguments = BackupScriptCommand.ToPowerShellArguments(_scriptPath, args);
-
-            using (var process = new Process())
-            {
-                process.StartInfo = startInfo;
-                process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e)
-                {
-                    if (e.Data != null)
-                    {
-                        AppendLog(e.Data);
-                    }
-                };
-                process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e)
-                {
-                    if (e.Data != null)
-                    {
-                        AppendLog(e.Data);
-                    }
-                };
-
-                _runningProcess = process;
-                process.Start();
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-                process.WaitForExit();
-                _runningProcess = null;
-                AppendLog("Codigo de saida: " + process.ExitCode);
-                return process.ExitCode;
-            }
+            return _runner.Run(_repoRoot, _scriptPath, args, AppendLog);
         }
 
         private void StopRunningProcess()
         {
             try
             {
-                if (_runningProcess != null && !_runningProcess.HasExited)
-                {
-                    _runningProcess.Kill();
-                    AppendLog("Processo interrompido pelo usuario.");
-                }
+                _runner.Stop(AppendLog);
             }
             catch (Exception ex)
             {
