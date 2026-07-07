@@ -8,7 +8,9 @@
     Melhorias principais:
     - Parametros para destino, VHDX, retencao e reserva de espaco.
     - Modo -DryRun com inventario e estimativa, sem exportar nem copiar.
-    - Opcao -SkipVhdx para fazer backup somente das distros WSL.
+    - Escolha de modo: All, Distros ou Vhdx.
+    - Retomada automatica de backup interrompido em _staging.
+    - Opcao -SkipVhdx mantida por compatibilidade.
     - Estimativa conservadora de espaco usando os ext4.vhdx das distros.
     - Staging: so publica o backup depois de validar arquivos e hashes.
     - SHA-256 para TARs e VHDX.
@@ -29,8 +31,13 @@ param(
     [ValidateRange(1, 100000)]
     [int]$MinimumFreeSpaceGB = 25,
 
+    [ValidateSet("All", "Distros", "Vhdx")]
+    [string]$BackupMode = "All",
+
     [switch]$IncludeDocker,
     [switch]$SkipVhdx,
+    [switch]$NoResume,
+    [string]$ResumeRunId,
     [switch]$DryRun
 )
 
@@ -47,6 +54,21 @@ $Config = [ordered]@{
     HashAlgorithm        = "SHA256"
     IncludeDocker        = [bool]$IncludeDocker
     SkipVhdx             = [bool]$SkipVhdx
+    BackupMode           = $BackupMode
+    AutoResume           = -not [bool]$NoResume
+    ResumeRunId          = $ResumeRunId
+}
+
+if ($Config.SkipVhdx) {
+    if ($Config.BackupMode -eq "Vhdx") {
+        throw "Use -BackupMode Vhdx sem -SkipVhdx, ou use -BackupMode Distros para copiar somente distros."
+    }
+
+    $Config.BackupMode = "Distros"
+}
+
+if ($NoResume.IsPresent -and -not [string]::IsNullOrWhiteSpace($ResumeRunId)) {
+    throw "Use -NoResume ou -ResumeRunId, nao os dois ao mesmo tempo."
 }
 
 $script:RunId = Get-Date -Format "yyyyMMdd_HHmmss_fff"
@@ -479,7 +501,6 @@ function Get-BackupPlan {
 
 function Get-BackupEstimate {
     param(
-        [Parameter(Mandatory)]
         [array]$SelectedDistros,
 
         [AllowNull()]
@@ -511,6 +532,41 @@ function Get-BackupEstimate {
     }
 }
 
+function New-DistroBackupResult {
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Distro,
+
+        [Parameter(Mandatory)]
+        [string]$TarPath,
+
+        [Parameter(Mandatory)]
+        [string]$Hash,
+
+        [Parameter(Mandatory)]
+        [double]$DurationSeconds,
+
+        [Parameter(Mandatory)]
+        [string]$Status
+    )
+
+    $fileInfo = Get-Item -LiteralPath $TarPath -ErrorAction Stop
+
+    return [PSCustomObject]@{
+        Name                  = $Distro.Name
+        File                  = "distros\$($Distro.SafeName).tar"
+        SizeBytes             = [Int64]$fileInfo.Length
+        SizeFormatted         = Format-Size $fileInfo.Length
+        DurationSeconds       = [math]::Round($DurationSeconds, 1)
+        SHA256                = $Hash
+        SourceBasePath        = $Distro.BasePath
+        SourceVhdx            = $Distro.SourceVhdx
+        SourceVhdxBytes       = [Int64]$Distro.SourceVhdxBytes
+        SourceVhdxSize        = $Distro.SourceVhdxSize
+        Status                = $Status
+    }
+}
+
 function Export-WslDistro {
     param(
         [Parameter(Mandatory)]
@@ -530,15 +586,48 @@ function Export-WslDistro {
     $finalTar = Join-Path $distrosDir "$($Distro.SafeName).tar"
     $partialTar = "$finalTar.partial"
 
+    if (Test-Path -LiteralPath $finalTar) {
+        $startReuse = Get-Date
+        Write-Status -Level "WARN" -Message "Reaproveitando TAR ja existente no staging: $($Distro.Name)"
+
+        Test-TarArchive -TarPath $finalTar
+
+        $hash = Get-FileHashSafe -Path $finalTar -Label "$($Distro.Name) existente"
+        $duration = (Get-Date) - $startReuse
+        $fileInfo = Get-Item -LiteralPath $finalTar
+
+        Write-Status -Level "OK" -Message (
+            "Distro reaproveitada: $($Distro.Name) | " +
+            "Tamanho: $(Format-Size $fileInfo.Length) | " +
+            "Hash: $(Get-ShortHash $hash)"
+        )
+
+        return New-DistroBackupResult `
+            -Distro $Distro `
+            -TarPath $finalTar `
+            -Hash $hash `
+            -DurationSeconds $duration.TotalSeconds `
+            -Status "REUSED"
+    }
+
     if (Test-Path -LiteralPath $partialTar) {
         Remove-Item -LiteralPath $partialTar -Force
     }
 
     Write-Status -Level "INFO" -Message "Exportando distro: $($Distro.Name)"
 
-    & wsl.exe --export $Distro.Name $partialTar
+    $exportOutput = & wsl.exe --export $Distro.Name $partialTar 2>&1
+    $exportExitCode = $LASTEXITCODE
 
-    if ($LASTEXITCODE -ne 0) {
+    foreach ($line in @($exportOutput)) {
+        $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
+            Write-Status -Level "INFO" -Message "wsl export: $cleanLine"
+        }
+    }
+
+    if ($exportExitCode -ne 0) {
         if (Test-Path -LiteralPath $partialTar) {
             Remove-Item -LiteralPath $partialTar -Force -ErrorAction SilentlyContinue
         }
@@ -552,10 +641,10 @@ function Export-WslDistro {
 
     Test-TarArchive -TarPath $partialTar
 
-    $fileInfo = Get-Item -LiteralPath $partialTar
     $hash = Get-FileHashSafe -Path $partialTar -Label $Distro.Name
 
     Move-Item -LiteralPath $partialTar -Destination $finalTar
+    $fileInfo = Get-Item -LiteralPath $finalTar
 
     $duration = (Get-Date) - $start
 
@@ -566,19 +655,12 @@ function Export-WslDistro {
         "Hash: $(Get-ShortHash $hash)"
     )
 
-    return [PSCustomObject]@{
-        Name                  = $Distro.Name
-        File                  = "distros\$($Distro.SafeName).tar"
-        SizeBytes             = [Int64]$fileInfo.Length
-        SizeFormatted         = Format-Size $fileInfo.Length
-        DurationSeconds       = [math]::Round($duration.TotalSeconds, 1)
-        SHA256                = $hash
-        SourceBasePath        = $Distro.BasePath
-        SourceVhdx            = $Distro.SourceVhdx
-        SourceVhdxBytes       = [Int64]$Distro.SourceVhdxBytes
-        SourceVhdxSize        = $Distro.SourceVhdxSize
-        Status                = "OK"
-    }
+    return New-DistroBackupResult `
+        -Distro $Distro `
+        -TarPath $finalTar `
+        -Hash $hash `
+        -DurationSeconds $duration.TotalSeconds `
+        -Status "OK"
 }
 
 function Backup-Vhdx {
@@ -621,10 +703,6 @@ function Backup-Vhdx {
     $sourceFile = Split-Path -Leaf $SourceVhdx
     $targetVhdx = Join-Path $workspaceDir $sourceFile
 
-    if (Test-Path -LiteralPath $targetVhdx) {
-        Remove-Item -LiteralPath $targetVhdx -Force
-    }
-
     Write-Status -Level "INFO" -Message (
         "Calculando hash do VHDX original: " +
         "$(Format-Size $sourceInfo.Length)"
@@ -633,6 +711,41 @@ function Backup-Vhdx {
     $sourceHash = Get-FileHashSafe `
         -Path $SourceVhdx `
         -Label "VHDX original"
+
+    if (Test-Path -LiteralPath $targetVhdx) {
+        $existingInfo = Get-Item -LiteralPath $targetVhdx
+
+        if ($existingInfo.Length -eq $sourceInfo.Length) {
+            Write-Status -Level "WARN" -Message "Reaproveitando VHDX ja existente no staging: $targetVhdx"
+
+            $existingHash = Get-FileHashSafe `
+                -Path $targetVhdx `
+                -Label "VHDX copiado existente"
+
+            if ($sourceHash -eq $existingHash) {
+                $duration = (Get-Date) - $start
+
+                Write-Status -Level "OK" -Message (
+                    "VHDX reaproveitado | " +
+                    "Tamanho: $(Format-Size $existingInfo.Length) | " +
+                    "Hash: $(Get-ShortHash $existingHash)"
+                )
+
+                return [PSCustomObject]@{
+                    File            = "workspace\$sourceFile"
+                    Source          = $SourceVhdx
+                    SizeBytes       = [Int64]$existingInfo.Length
+                    SizeFormatted   = Format-Size $existingInfo.Length
+                    DurationSeconds = [math]::Round($duration.TotalSeconds, 1)
+                    SHA256          = $existingHash
+                    Status          = "REUSED"
+                }
+            }
+        }
+
+        Write-Status -Level "WARN" -Message "VHDX existente no staging nao confere com a origem. Copiando novamente."
+        Remove-Item -LiteralPath $targetVhdx -Force
+    }
 
     Write-Status -Level "INFO" -Message "Copiando VHDX com Robocopy..."
 
@@ -704,7 +817,6 @@ function Write-Checksums {
         [Parameter(Mandatory)]
         [string]$StageRoot,
 
-        [Parameter(Mandatory)]
         [array]$Distros,
 
         [AllowNull()]
@@ -720,10 +832,18 @@ function Write-Checksums {
     )
 
     foreach ($distro in $Distros) {
+        if (-not $distro.PSObject.Properties["SHA256"]) {
+            throw "Resultado de distro invalido ao gerar checksums. Valor recebido: $distro"
+        }
+
         $lines += "$($distro.SHA256) *$($distro.File)"
     }
 
     if ($null -ne $Vhdx) {
+        if (-not $Vhdx.PSObject.Properties["SHA256"]) {
+            throw "Resultado de VHDX invalido ao gerar checksums. Valor recebido: $Vhdx"
+        }
+
         $lines += "$($Vhdx.SHA256) *$($Vhdx.File)"
     }
 
@@ -738,7 +858,6 @@ function Write-RestoreGuide {
         [Parameter(Mandatory)]
         [string]$FinalRunPath,
 
-        [Parameter(Mandatory)]
         [array]$Distros,
 
         [AllowNull()]
@@ -759,17 +878,23 @@ function Write-RestoreGuide {
         "COMANDOS PARA RESTAURAR AS DISTROS:"
     )
 
-    foreach ($distro in $Distros) {
-        $targetName = Get-SafeFileName -Name $distro.Name
-        $targetPath = "D:\WSL-Restored\$targetName"
-        $tarPath = Join-Path $FinalRunPath $distro.File
-
+    if ($Distros.Count -eq 0) {
         $lines += ""
-        $lines += (
-            "wsl.exe --import `"$($distro.Name)`" " +
-            "`"$targetPath`" " +
-            "`"$tarPath`" --version 2"
-        )
+        $lines += "Nenhuma distro foi incluida neste backup."
+    }
+    else {
+        foreach ($distro in $Distros) {
+            $targetName = Get-SafeFileName -Name $distro.Name
+            $targetPath = "D:\WSL-Restored\$targetName"
+            $tarPath = Join-Path $FinalRunPath $distro.File
+
+            $lines += ""
+            $lines += (
+                "wsl.exe --import `"$($distro.Name)`" " +
+                "`"$targetPath`" " +
+                "`"$tarPath`" --version 2"
+            )
+        }
     }
 
     $lines += ""
@@ -797,10 +922,8 @@ function Write-Manifest {
         [Parameter(Mandatory)]
         [PSCustomObject]$DriveInfo,
 
-        [Parameter(Mandatory)]
         [array]$Distros,
 
-        [Parameter(Mandatory)]
         [array]$SkippedDistros,
 
         [Parameter(Mandatory)]
@@ -834,9 +957,11 @@ function Write-Manifest {
         }
 
         Options = @{
+            BackupMode        = $Config.BackupMode
             HashAlgorithm     = $Config.HashAlgorithm
             IncludeDocker     = $Config.IncludeDocker
             SkipVhdx          = $Config.SkipVhdx
+            AutoResume        = $Config.AutoResume
             SourceVhdx        = $Config.SourceVhdx
             KeepLastRuns      = $Config.KeepLastRuns
             MinimumFreeGB     = $Config.MinimumFreeSpaceGB
@@ -912,16 +1037,141 @@ function Remove-OldBackups {
     }
 }
 
+function Get-StageRunId {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StageRoot
+    )
+
+    $name = Split-Path -Leaf $StageRoot
+    return ($name -replace "\.partial$", "")
+}
+
+function Get-StageBackupMode {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StageRoot
+    )
+
+    $statePath = Join-Path $StageRoot "resume_state.json"
+
+    if (Test-Path -LiteralPath $statePath) {
+        try {
+            $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+
+            if ($state.BackupMode -in @("All", "Distros", "Vhdx")) {
+                return [string]$state.BackupMode
+            }
+        }
+        catch {
+            Write-Status -Level "WARN" -Message "Nao foi possivel ler resume_state.json em $StageRoot."
+        }
+    }
+
+    # Stagings antigos, criados antes do modo selecionavel, eram sempre All.
+    return "All"
+}
+
+function Find-ResumeStage {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StagingRoot,
+
+        [Parameter(Mandatory)]
+        [string]$BackupMode,
+
+        [AllowNull()]
+        [string]$ResumeRunId
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ResumeRunId)) {
+        $explicitStage = Join-Path $StagingRoot "$ResumeRunId.partial"
+
+        if (-not (Test-Path -LiteralPath $explicitStage -PathType Container)) {
+            throw "Staging solicitado para retomada nao encontrado: $explicitStage"
+        }
+
+        return $explicitStage
+    }
+
+    $candidates = @(
+        Get-ChildItem -LiteralPath $StagingRoot -Directory -Filter "*.partial" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending
+    )
+
+    foreach ($candidate in $candidates) {
+        $stageMode = Get-StageBackupMode -StageRoot $candidate.FullName
+
+        if ($stageMode -eq $BackupMode) {
+            return $candidate.FullName
+        }
+    }
+
+    return $null
+}
+
+function Write-ResumeState {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StageRoot,
+
+        [array]$SelectedDistros,
+
+        [Parameter(Mandatory)]
+        [bool]$WillBackupExtraVhdx
+    )
+
+    $state = [ordered]@{
+        RunId               = $script:RunId
+        BackupMode          = $Config.BackupMode
+        UpdatedAt           = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        IncludeDocker       = $Config.IncludeDocker
+        WillBackupExtraVhdx = $WillBackupExtraVhdx
+        SourceVhdx          = $Config.SourceVhdx
+        SelectedDistros     = @($SelectedDistros | Select-Object -ExpandProperty Name)
+    }
+
+    $state |
+        ConvertTo-Json -Depth 6 |
+        Set-Content -LiteralPath (Join-Path $StageRoot "resume_state.json") -Encoding UTF8
+}
+
+function New-LogFilePath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$LogsRoot
+    )
+
+    $path = Join-Path $LogsRoot "Mega_Backup_WSL_$script:RunId.log"
+
+    if (-not (Test-Path -LiteralPath $path)) {
+        return $path
+    }
+
+    $suffix = Get-Date -Format "yyyyMMdd_HHmmss"
+    return (Join-Path $LogsRoot "Mega_Backup_WSL_$($script:RunId)_resume_$suffix.log")
+}
+
 $stageRoot = $null
 $finalRunPath = $null
 $backupCompleted = $false
+$resumingExistingStage = $false
 
 try {
     Write-Section "MEGA BACKUP WSL - SEGURO E VERSIONADO"
 
+    $needsDistros = ($Config.BackupMode -in @("All", "Distros"))
+    $needsExtraVhdx = ($Config.BackupMode -in @("All", "Vhdx"))
+
     Assert-Command -Name "wsl.exe"
-    Assert-Command -Name "tar.exe"
-    Assert-Command -Name "robocopy.exe"
+
+    if ($needsDistros) {
+        Assert-Command -Name "tar.exe"
+    }
+
+    if ($needsExtraVhdx) {
+        Assert-Command -Name "robocopy.exe"
+    }
 
     if ([string]::IsNullOrWhiteSpace($Config.BackupRoot)) {
         throw "BackupRoot nao pode ficar vazio."
@@ -963,12 +1213,31 @@ try {
         }
     }
 
-    $script:LogFile = Join-Path $logsRoot "Mega_Backup_WSL_$script:RunId.log"
+    if (-not $DryRun.IsPresent -and $Config.AutoResume) {
+        $resumeStage = Find-ResumeStage `
+            -StagingRoot $stagingRoot `
+            -BackupMode $Config.BackupMode `
+            -ResumeRunId $Config.ResumeRunId
+
+        if ($resumeStage) {
+            $stageRoot = $resumeStage
+            $script:RunId = Get-StageRunId -StageRoot $stageRoot
+            $finalRunPath = Join-Path $runsRoot $script:RunId
+            $resumingExistingStage = $true
+        }
+    }
+
+    $script:LogFile = New-LogFilePath -LogsRoot $logsRoot
     New-Item -ItemType File -Path $script:LogFile -Force | Out-Null
 
     Acquire-BackupLock -BackupRoot $backupRoot
 
     Write-Status -Level "TITLE" -Message "ID da execucao: $script:RunId"
+    Write-Status -Level "INFO" -Message "Modo de backup: $($Config.BackupMode)"
+    Write-Status -Level "INFO" -Message "Retomada automatica: $($Config.AutoResume)"
+    if ($resumingExistingStage) {
+        Write-Status -Level "WARN" -Message "Retomando staging existente: $stageRoot"
+    }
     Write-Status -Level "INFO" -Message "Computador: $env:COMPUTERNAME"
     Write-Status -Level "INFO" -Message "Usuario: $env:USERNAME"
     Write-Status -Level "INFO" -Message "PowerShell: $($PSVersionTable.PSVersion)"
@@ -983,7 +1252,7 @@ try {
         "$(Format-Size $driveInfo.SizeBytes)"
     )
     Write-Status -Level "INFO" -Message "Docker incluido: $($Config.IncludeDocker)"
-    Write-Status -Level "INFO" -Message "VHDX extra ignorado: $($Config.SkipVhdx)"
+    Write-Status -Level "INFO" -Message "VHDX extra incluido: $needsExtraVhdx"
     Write-Status -Level "INFO" -Message "Log: $script:LogFile"
 
     Assert-FreeSpace `
@@ -993,32 +1262,45 @@ try {
 
     Write-Section "INVENTARIO"
 
-    $distroNames = Get-WslDistros
-    $backupPlan = @(Get-BackupPlan -DistroNames $distroNames)
-    $selectedDistros = @($backupPlan | Where-Object { $_.Included })
-    $skippedDistros = @($backupPlan | Where-Object { -not $_.Included })
+    $backupPlan = @()
+    $selectedDistros = @()
+    $skippedDistros = @()
 
-    if ($selectedDistros.Count -eq 0) {
-        throw "Nenhuma distro foi selecionada para backup."
+    if ($needsDistros) {
+        $distroNames = Get-WslDistros
+        $backupPlan = @(Get-BackupPlan -DistroNames $distroNames)
+        $selectedDistros = @($backupPlan | Where-Object { $_.Included })
+        $skippedDistros = @($backupPlan | Where-Object { -not $_.Included })
+
+        if ($selectedDistros.Count -eq 0) {
+            throw "Nenhuma distro foi selecionada para backup."
+        }
+
+        foreach ($distro in $selectedDistros) {
+            Write-Status -Level "INFO" -Message (
+                "Distro selecionada: $($distro.Name) | " +
+                "VHDX estimado: $($distro.SourceVhdxSize)"
+            )
+        }
+
+        foreach ($distro in $skippedDistros) {
+            Write-Status -Level "WARN" -Message "Distro ignorada: $($distro.Name) ($($distro.Reason))"
+        }
+    }
+    else {
+        Write-Status -Level "WARN" -Message "Modo VHDX: inventario de distros ignorado."
     }
 
-    foreach ($distro in $selectedDistros) {
-        Write-Status -Level "INFO" -Message (
-            "Distro selecionada: $($distro.Name) | " +
-            "VHDX estimado: $($distro.SourceVhdxSize)"
-        )
+    if ($needsExtraVhdx -and [string]::IsNullOrWhiteSpace($sourceVhdxFull)) {
+        throw "BackupMode $($Config.BackupMode) exige um caminho em -SourceVhdx."
     }
 
-    foreach ($distro in $skippedDistros) {
-        Write-Status -Level "WARN" -Message "Distro ignorada: $($distro.Name) ($($distro.Reason))"
-    }
-
-    $willBackupExtraVhdx = (-not $Config.SkipVhdx) -and (-not [string]::IsNullOrWhiteSpace($sourceVhdxFull))
+    $willBackupExtraVhdx = $needsExtraVhdx -and (-not [string]::IsNullOrWhiteSpace($sourceVhdxFull))
     $sourceVhdxInfo = $null
 
     if ($willBackupExtraVhdx) {
         if (-not (Test-Path -LiteralPath $sourceVhdxFull)) {
-            throw "VHDX extra nao encontrado: $sourceVhdxFull. Use -SkipVhdx para fazer backup somente das distros."
+            throw "VHDX extra nao encontrado: $sourceVhdxFull. Use -BackupMode Distros para fazer backup somente das distros."
         }
 
         $sourceVhdxInfo = Get-Item -LiteralPath $sourceVhdxFull
@@ -1062,35 +1344,48 @@ try {
         $backupCompleted = $true
     }
     else {
-        $stageRoot = Join-Path $stagingRoot "$script:RunId.partial"
-        $finalRunPath = Join-Path $runsRoot $script:RunId
+        if (-not $resumingExistingStage) {
+            $stageRoot = Join-Path $stagingRoot "$script:RunId.partial"
+            $finalRunPath = Join-Path $runsRoot $script:RunId
 
-        if (Test-Path -LiteralPath $stageRoot) {
-            throw "Staging ja existe: $stageRoot"
+            if (Test-Path -LiteralPath $stageRoot) {
+                throw "Staging ja existe: $stageRoot"
+            }
+
+            New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
         }
 
         if (Test-Path -LiteralPath $finalRunPath) {
             throw "Destino final ja existe: $finalRunPath"
         }
 
-        New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+        Write-ResumeState `
+            -StageRoot $stageRoot `
+            -SelectedDistros $selectedDistros `
+            -WillBackupExtraVhdx $willBackupExtraVhdx
 
         Write-Section "ETAPA 1 DE 4 - DESLIGAR WSL"
         Stop-Wsl
 
-        Write-Section "ETAPA 2 DE 4 - EXPORTAR DISTROS"
-
         $distroResults = @()
 
-        foreach ($distro in $selectedDistros) {
-            $result = Export-WslDistro `
-                -Distro $distro `
-                -StageRoot $stageRoot
+        if ($needsDistros) {
+            Write-Section "ETAPA 2 DE 4 - EXPORTAR DISTROS"
 
-            $distroResults += $result
+            foreach ($distro in $selectedDistros) {
+                $result = Export-WslDistro `
+                    -Distro $distro `
+                    -StageRoot $stageRoot
+
+                $distroResults += $result
+            }
+        }
+        else {
+            Write-Section "ETAPA 2 DE 4 - EXPORTAR DISTROS"
+            Write-Status -Level "WARN" -Message "Etapa de distros ignorada pelo modo $($Config.BackupMode)."
         }
 
-        if ($distroResults.Count -eq 0) {
+        if ($needsDistros -and $distroResults.Count -eq 0) {
             throw "Nenhuma distro foi exportada."
         }
 
@@ -1106,6 +1401,10 @@ try {
         }
         else {
             Write-Status -Level "WARN" -Message "Etapa de VHDX extra ignorada."
+        }
+
+        if (-not $needsDistros -and $null -eq $vhdxResult) {
+            throw "Nenhum item foi incluido no backup."
         }
 
         Write-Section "ETAPA 4 DE 4 - RELATORIOS E PUBLICACAO"
@@ -1129,6 +1428,11 @@ try {
             -SkippedDistros $skippedDistros `
             -Estimate $estimate `
             -Vhdx $vhdxResult
+
+        $failedReportPath = Join-Path $stageRoot "FAILED.json"
+        if (Test-Path -LiteralPath $failedReportPath) {
+            Remove-Item -LiteralPath $failedReportPath -Force
+        }
 
         Move-Item `
             -LiteralPath $stageRoot `
@@ -1179,11 +1483,14 @@ catch {
 
     if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
         $failedReport = @{
-            RunId    = $script:RunId
-            FailedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            Computer = $env:COMPUTERNAME
-            User     = $env:USERNAME
-            Error    = $_.Exception.Message
+            RunId      = $script:RunId
+            FailedAt   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Computer   = $env:COMPUTERNAME
+            User       = $env:USERNAME
+            BackupMode = $Config.BackupMode
+            StageRoot  = $stageRoot
+            LogFile    = $script:LogFile
+            Error      = $_.Exception.Message
         }
 
         $failedReport |
