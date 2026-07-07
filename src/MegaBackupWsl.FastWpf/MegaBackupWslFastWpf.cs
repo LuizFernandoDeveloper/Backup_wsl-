@@ -173,7 +173,7 @@ namespace MegaBackupWsl.FastWpf
                 MinWidth = 960,
                 MinHeight = 640,
                 WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                Background = Brush("#F8FAFC"),
+                Background = Brush("#EAF3FF"),
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 13
             };
@@ -202,6 +202,8 @@ namespace MegaBackupWsl.FastWpf
         private void AddHeader(Grid root)
         {
             var border = PanelBorder();
+            border.Background = Brush("#EAF3FF");
+            border.BorderBrush = Brush("#93C5FD");
             border.Padding = new Thickness(18);
             Grid.SetRow(border, 0);
             root.Children.Add(border);
@@ -222,14 +224,14 @@ namespace MegaBackupWsl.FastWpf
             {
                 Text = "Interface .exe para organizar backups, validar templates e executar rotinas seguras.",
                 Margin = new Thickness(0, 5, 0, 0),
-                Foreground = Brush("#64748B")
+                Foreground = Brush("#4B647E")
             });
             grid.Children.Add(titleStack);
 
             var statusBorder = new Border
             {
-                Background = Brush("#ECFDF5"),
-                BorderBrush = Brush("#99F6E4"),
+                Background = Brush("#DBEAFE"),
+                BorderBrush = Brush("#93C5FD"),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(16),
                 Padding = new Thickness(14, 7, 14, 7),
@@ -239,7 +241,7 @@ namespace MegaBackupWsl.FastWpf
             _statusText = new TextBlock
             {
                 Text = "Pronto",
-                Foreground = Brush("#134E4A"),
+                Foreground = Brush("#1E3A8A"),
                 FontWeight = FontWeights.SemiBold
             };
             statusBorder.Child = _statusText;
@@ -330,13 +332,14 @@ namespace MegaBackupWsl.FastWpf
                 Text = "Organizar nao exporta nem desliga WSL. Full Template pode desligar WSL.",
                 Margin = new Thickness(0, 16, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = Brush("#64748B")
+                Foreground = Brush("#4B647E")
             });
 
             _mainTabs = new TabControl
             {
                 Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0)
+                BorderThickness = new Thickness(0),
+                ItemContainerStyle = TabItemStyle()
             };
             Grid.SetColumn(_mainTabs, 1);
             grid.Children.Add(_mainTabs);
@@ -384,7 +387,7 @@ namespace MegaBackupWsl.FastWpf
             _healthSummaryText = new TextBlock
             {
                 Text = "OK 0   WARN 0   ERROR 0   Total 0",
-                Foreground = Brush("#475569"),
+                Foreground = Brush("#1E3A8A"),
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, 12)
             };
@@ -405,7 +408,7 @@ namespace MegaBackupWsl.FastWpf
             _healthEmptyText = new TextBlock
             {
                 Text = "Sem diagnostico carregado.",
-                Foreground = Brush("#64748B"),
+                Foreground = Brush("#4B647E"),
                 Margin = new Thickness(0, 8, 0, 12)
             };
             content.Children.Add(_healthEmptyText);
@@ -466,8 +469,8 @@ namespace MegaBackupWsl.FastWpf
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 TextWrapping = TextWrapping.NoWrap,
-                Background = Brush("#0F172A"),
-                Foreground = Brush("#E2E8F0"),
+                Background = Brush("#071426"),
+                Foreground = Brush("#DBEAFE"),
                 BorderThickness = new Thickness(0),
                 Padding = new Thickness(12)
             };
@@ -502,7 +505,7 @@ namespace MegaBackupWsl.FastWpf
             {
                 Text = "Script: " + (_scriptPath ?? "nao encontrado"),
                 Margin = new Thickness(2, 12, 2, 0),
-                Foreground = Brush("#64748B")
+                Foreground = Brush("#4B647E")
             };
             Grid.SetRow(footer, 3);
             root.Children.Add(footer);
@@ -540,7 +543,7 @@ namespace MegaBackupWsl.FastWpf
                 MinHeight = 34,
                 Padding = new Thickness(9, 6, 9, 6),
                 VerticalContentAlignment = VerticalAlignment.Center,
-                BorderBrush = Brush("#CBD5E1"),
+                BorderBrush = Brush("#93C5FD"),
                 BorderThickness = new Thickness(1)
             };
         }
@@ -551,7 +554,7 @@ namespace MegaBackupWsl.FastWpf
             {
                 MinHeight = 34,
                 Padding = new Thickness(7, 5, 7, 5),
-                BorderBrush = Brush("#CBD5E1")
+                BorderBrush = Brush("#93C5FD")
             };
 
             foreach (var item in items)
@@ -578,9 +581,9 @@ namespace MegaBackupWsl.FastWpf
                 Content = text,
                 MinHeight = 38,
                 Padding = new Thickness(14, 8, 14, 8),
-                Background = primary ? Brush("#0F766E") : Brush("#E2E8F0"),
+                Background = primary ? Brush("#2563EB") : Brush("#DBEAFE"),
                 Foreground = primary ? Brushes.White : Brush("#0F172A"),
-                BorderBrush = primary ? Brush("#134E4A") : Brush("#CBD5E1"),
+                BorderBrush = primary ? Brush("#1D4ED8") : Brush("#93C5FD"),
                 BorderThickness = new Thickness(1),
                 Cursor = System.Windows.Input.Cursors.Hand
             };
@@ -591,10 +594,20 @@ namespace MegaBackupWsl.FastWpf
             return new Border
             {
                 Background = Brushes.White,
-                BorderBrush = Brush("#CBD5E1"),
+                BorderBrush = Brush("#BFDBFE"),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8)
             };
+        }
+
+        private static Style TabItemStyle()
+        {
+            var style = new Style(typeof(TabItem));
+            style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(12, 6, 12, 6)));
+            style.Setters.Add(new Setter(Control.MarginProperty, new Thickness(0, 0, 4, 0)));
+            style.Setters.Add(new Setter(Control.ForegroundProperty, Brush("#1E3A8A")));
+            style.Setters.Add(new Setter(Control.FontWeightProperty, FontWeights.SemiBold));
+            return style;
         }
 
         private void RefreshHealthDashboard()
@@ -649,7 +662,7 @@ namespace MegaBackupWsl.FastWpf
                 Text = name,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = Brush("#334155")
+                Foreground = Brush("#17324D")
             });
 
             var bar = PercentBar(percent, fill);
@@ -661,7 +674,7 @@ namespace MegaBackupWsl.FastWpf
                 Text = ClampPercent(percent) + "%",
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = Brush("#475569"),
+                Foreground = Brush("#1E3A8A"),
                 FontWeight = FontWeights.SemiBold
             };
             Grid.SetColumn(value, 2);
@@ -682,7 +695,7 @@ namespace MegaBackupWsl.FastWpf
                 Text = name,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = Brush("#334155")
+                Foreground = Brush("#17324D")
             });
 
             var percent = maxValue <= 0 ? 0 : (int)Math.Round((value * 100.0) / maxValue);
@@ -695,7 +708,7 @@ namespace MegaBackupWsl.FastWpf
                 Text = value.ToString(),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = Brush("#475569"),
+                Foreground = Brush("#1E3A8A"),
                 FontWeight = FontWeights.SemiBold
             };
             Grid.SetColumn(valueText, 2);
@@ -725,7 +738,7 @@ namespace MegaBackupWsl.FastWpf
             return new Border
             {
                 Height = 12,
-                Background = Brush("#E2E8F0"),
+                Background = Brush("#D7E6F8"),
                 CornerRadius = new CornerRadius(5),
                 Child = grid,
                 VerticalAlignment = VerticalAlignment.Center
@@ -736,8 +749,8 @@ namespace MegaBackupWsl.FastWpf
         {
             var border = new Border
             {
-                Background = Brush("#F8FAFC"),
-                BorderBrush = Brush("#CBD5E1"),
+                Background = Brush("#F8FBFF"),
+                BorderBrush = Brush("#BFDBFE"),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(12),
@@ -776,7 +789,7 @@ namespace MegaBackupWsl.FastWpf
             {
                 Text = row.WarningSummary,
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = row.RiskScore == 0 ? Brush("#64748B") : Brush("#7F1D1D"),
+                Foreground = string.Equals(row.Status, "ERROR", StringComparison.OrdinalIgnoreCase) ? Brush("#991B1B") : (row.RiskScore == 0 ? Brush("#4B647E") : Brush("#92400E")),
                 VerticalAlignment = VerticalAlignment.Center
             };
             Grid.SetColumn(warnings, 4);
@@ -797,14 +810,14 @@ namespace MegaBackupWsl.FastWpf
             {
                 Text = label,
                 FontSize = 11,
-                Foreground = Brush("#64748B")
+                Foreground = Brush("#4B647E")
             });
 
             panel.Children.Add(new TextBlock
             {
                 Text = value,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = Brush("#0F172A")
+                Foreground = Brush("#0B1F33")
             });
 
             return panel;
@@ -843,7 +856,7 @@ namespace MegaBackupWsl.FastWpf
                 return Brush("#D97706");
             }
 
-            return Brush("#0F766E");
+            return Brush("#2563EB");
         }
 
         private static Brush RiskBrush(DistroHealthViewModel row)
@@ -858,7 +871,7 @@ namespace MegaBackupWsl.FastWpf
                 return Brush("#D97706");
             }
 
-            return Brush("#0F766E");
+            return Brush("#2563EB");
         }
 
         private static Brush StatusBackgroundBrush(string status)
@@ -873,7 +886,7 @@ namespace MegaBackupWsl.FastWpf
                 return Brush("#FFFBEB");
             }
 
-            return Brush("#ECFDF5");
+            return Brush("#EFF6FF");
         }
 
         private static Brush StatusBorderBrush(string status)
@@ -888,7 +901,7 @@ namespace MegaBackupWsl.FastWpf
                 return Brush("#FCD34D");
             }
 
-            return Brush("#99F6E4");
+            return Brush("#93C5FD");
         }
 
         private static Brush StatusTextBrush(string status)
@@ -903,7 +916,7 @@ namespace MegaBackupWsl.FastWpf
                 return Brush("#92400E");
             }
 
-            return Brush("#134E4A");
+            return Brush("#1D4ED8");
         }
 
         private static int ClampPercent(int value)
@@ -954,7 +967,7 @@ namespace MegaBackupWsl.FastWpf
                 _mainTabs.SelectedIndex = 0;
             }
 
-            RunSingle("Saude das distros", Args("-BackupMode", "Distros", "-QualityGate", Selected(_qualityGateComboBox), "-HealthOnly"));
+            RunSingle("Saude das distros", Args("-BackupMode", "Distros", "-QualityGate", Selected(_qualityGateComboBox), "-HealthOnly", "-UiEvents"));
         }
 
         private void RunSingle(string title, List<string> args)
@@ -1003,7 +1016,7 @@ namespace MegaBackupWsl.FastWpf
             {
                 try
                 {
-                    var purifyExit = RunPowerShell(Args("-BackupMode", "Distros", "-PurifyOnly", "-QualityGate", "Template"));
+                    var purifyExit = RunPowerShell(Args("-BackupMode", "Distros", "-PurifyOnly", "-QualityGate", "Template", "-UiEvents"));
 
                     if (purifyExit != 0)
                     {
@@ -1137,9 +1150,13 @@ namespace MegaBackupWsl.FastWpf
         {
             Dispatcher.BeginInvoke(new Action(delegate
             {
-                ParseHealthLine(text);
-                _logTextBox.AppendText(text + Environment.NewLine);
-                _logTextBox.ScrollToEnd();
+                var hideLine = ParseHealthLine(text);
+
+                if (!hideLine)
+                {
+                    _logTextBox.AppendText(text + Environment.NewLine);
+                    _logTextBox.ScrollToEnd();
+                }
             }));
         }
 
@@ -1149,11 +1166,16 @@ namespace MegaBackupWsl.FastWpf
             RefreshHealthDashboard();
         }
 
-        private void ParseHealthLine(string text)
+        private bool ParseHealthLine(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                return;
+                return false;
+            }
+
+            if (ParseUiEventLine(text))
+            {
+                return true;
             }
 
             var healthMatch = HealthLineRegex.Match(text);
@@ -1167,7 +1189,7 @@ namespace MegaBackupWsl.FastWpf
                 health.TemporarySockets = ReadLong(healthMatch.Groups["sockets"].Value);
                 health.Vhdx = healthMatch.Groups["vhdx"].Value.Trim();
                 RefreshHealthDashboard();
-                return;
+                return false;
             }
 
             var warningMatch = WarningLineRegex.Match(text);
@@ -1182,7 +1204,7 @@ namespace MegaBackupWsl.FastWpf
                 }
 
                 RefreshHealthDashboard();
-                return;
+                return false;
             }
 
             var deepMatch = DeepHealthLineRegex.Match(text);
@@ -1222,7 +1244,7 @@ namespace MegaBackupWsl.FastWpf
                 }
 
                 RefreshHealthDashboard();
-                return;
+                return false;
             }
 
             var directoryMatch = DirectoryIssueLineRegex.Match(text);
@@ -1230,7 +1252,7 @@ namespace MegaBackupWsl.FastWpf
             {
                 GetHealthRow(directoryMatch.Groups["name"].Value).AddWarning("erros de diretorio");
                 RefreshHealthDashboard();
-                return;
+                return false;
             }
 
             var dmesgMatch = DmesgIssueLineRegex.Match(text);
@@ -1239,6 +1261,161 @@ namespace MegaBackupWsl.FastWpf
                 GetHealthRow(dmesgMatch.Groups["name"].Value).AddWarning("dmesg com sinal grave");
                 RefreshHealthDashboard();
             }
+
+            return false;
+        }
+
+        private bool ParseUiEventLine(string text)
+        {
+            const string prefix = "MBWSL_UI_EVENT ";
+
+            if (!text.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var fields = ParseUiEventFields(text.Substring(prefix.Length));
+            string eventName;
+
+            if (!fields.TryGetValue("Event", out eventName) ||
+                !string.Equals(eventName, "DistroHealth", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            ApplyDistroHealthEvent(fields);
+            return true;
+        }
+
+        private void ApplyDistroHealthEvent(Dictionary<string, string> fields)
+        {
+            string name;
+            if (!fields.TryGetValue("Name", out name))
+            {
+                name = "Desconhecida";
+            }
+
+            var health = GetHealthRow(name);
+            string value;
+
+            if (fields.TryGetValue("Status", out value))
+            {
+                health.Status = value;
+            }
+
+            if (fields.TryGetValue("RootUsedPercent", out value))
+            {
+                health.RootUsedPercent = ReadInt(value);
+            }
+
+            if (fields.TryGetValue("RootFree", out value))
+            {
+                health.RootFree = value;
+            }
+
+            if (fields.TryGetValue("InodeUsedPercent", out value))
+            {
+                health.InodeUsedPercent = ReadInt(value);
+            }
+
+            if (fields.TryGetValue("TemporarySockets", out value))
+            {
+                health.TemporarySockets = ReadLong(value);
+            }
+
+            if (fields.TryGetValue("AllSockets", out value))
+            {
+                health.AllSockets = ReadLong(value);
+            }
+
+            if (fields.TryGetValue("BrokenLinks", out value))
+            {
+                health.BrokenLinks = ReadLong(value);
+            }
+
+            if (fields.TryGetValue("FindErrorCount", out value))
+            {
+                health.FindErrorCount = ReadLong(value);
+            }
+
+            if (fields.TryGetValue("RootReadOnly", out value))
+            {
+                health.RootReadOnly = ReadBool(value);
+            }
+
+            if (fields.TryGetValue("TmpWritable", out value))
+            {
+                health.TmpWritable = ReadBool(value);
+            }
+
+            if (fields.TryGetValue("HomeWritable", out value))
+            {
+                health.HomeWritable = ReadBool(value);
+            }
+
+            if (fields.TryGetValue("Vhdx", out value))
+            {
+                health.Vhdx = value;
+            }
+
+            if (fields.TryGetValue("Warnings", out value) && !string.IsNullOrWhiteSpace(value))
+            {
+                var warnings = value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var warning in warnings)
+                {
+                    health.AddWarning(warning.Trim());
+                }
+            }
+
+            if (health.RootReadOnly)
+            {
+                health.AddWarning("root read-only");
+            }
+
+            if (!health.TmpWritable)
+            {
+                health.AddWarning("/tmp sem escrita");
+            }
+
+            if (!health.HomeWritable)
+            {
+                health.AddWarning("$HOME sem escrita");
+            }
+
+            if (health.FindErrorCount > 0)
+            {
+                health.AddWarning(health.FindErrorCount + " erro(s) de diretorio");
+            }
+
+            if (health.BrokenLinks > 0)
+            {
+                health.AddWarning(health.BrokenLinks + " link(s) quebrado(s)");
+            }
+
+            RefreshHealthDashboard();
+        }
+
+        private static Dictionary<string, string> ParseUiEventFields(string payload)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var parts = payload.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var part in parts)
+            {
+                var separator = part.IndexOf('=');
+
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                var key = part.Substring(0, separator);
+                var value = part.Substring(separator + 1);
+                result[key] = Uri.UnescapeDataString(value);
+            }
+
+            return result;
         }
 
         private DistroHealthViewModel GetHealthRow(string name)

@@ -52,6 +52,7 @@ param(
     [string]$ResumeRunId,
     [Alias("OrganizarDiretorios")]
     [switch]$OrganizeRuns,
+    [switch]$UiEvents,
     [switch]$DryRun
 )
 
@@ -77,6 +78,7 @@ $Config = [ordered]@{
     AutoResume           = -not [bool]$NoResume
     ResumeRunId          = $ResumeRunId
     OrganizeRuns         = [bool]$OrganizeRuns
+    UiEvents             = [bool]$UiEvents
 }
 
 if ($Config.SkipVhdx) {
@@ -235,7 +237,9 @@ function Write-Status {
         [string]$Message,
 
         [ValidateSet("INFO", "OK", "WARN", "ERROR", "TITLE")]
-        [string]$Level = "INFO"
+        [string]$Level = "INFO",
+
+        [switch]$NoWrap
     )
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -247,7 +251,12 @@ function Write-Status {
         $messageWidth = 40
     }
 
-    $messageLines = Split-TextForConsole -Text $Message -Width $messageWidth
+    if ($NoWrap.IsPresent) {
+        $messageLines = @((ConvertTo-SafeLogText -Value $Message))
+    }
+    else {
+        $messageLines = Split-TextForConsole -Text $Message -Width $messageWidth
+    }
     $color = @{
         INFO  = "Gray"
         OK    = "Green"
@@ -267,6 +276,34 @@ function Write-Status {
     if ($script:LogFile -and (Test-Path -LiteralPath $script:LogFile)) {
         Add-Content -LiteralPath $script:LogFile -Value $lines -Encoding UTF8
     }
+}
+
+function ConvertTo-UiEventValue {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    return [uri]::EscapeDataString((ConvertTo-SafeLogText -Value $Value))
+}
+
+function Write-UiEvent {
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Fields
+    )
+
+    if (-not $Config.UiEvents) {
+        return
+    }
+
+    $pairs = @()
+
+    foreach ($key in $Fields.Keys) {
+        $pairs += ("{0}={1}" -f $key, (ConvertTo-UiEventValue -Value $Fields[$key]))
+    }
+
+    Write-Output ("MBWSL_UI_EVENT " + ($pairs -join "|"))
 }
 
 function Write-Section {
@@ -970,6 +1007,24 @@ function Write-DistroHealth {
         default { "ERROR" }
     }
 
+    Write-UiEvent -Fields ([ordered]@{
+        Event             = "DistroHealth"
+        Name              = $Health.Name
+        Status            = $Health.Status
+        RootUsedPercent   = $Health.RootUsedPercent
+        RootFree          = (Format-Size $Health.RootFreeBytes)
+        InodeUsedPercent  = $Health.InodeUsedPercent
+        TemporarySockets  = $Health.TemporarySockets
+        AllSockets        = $Health.AllSockets
+        BrokenLinks       = $Health.BrokenLinks
+        RootReadOnly      = $Health.RootReadOnly
+        TmpWritable       = $Health.TmpWritable
+        HomeWritable      = $Health.HomeWritable
+        FindErrorCount    = $Health.FindErrorCount
+        Vhdx              = $Health.SourceVhdxSize
+        Warnings          = ($Health.Warnings -join "; ")
+    })
+
     Write-Status -Level $level -Message (
         "Saude $($Health.Name): $($Health.Status) | " +
         "/ usado: $($Health.RootUsedPercent)% | " +
@@ -977,12 +1032,12 @@ function Write-DistroHealth {
         "inodes: $($Health.InodeUsedPercent)% | " +
         "sockets temporarios: $($Health.TemporarySockets) | " +
         "VHDX: $($Health.SourceVhdxSize)"
-    )
+    ) -NoWrap
 
     if ($Health.Warnings.Count -gt 0) {
         Write-Status -Level "WARN" -Message (
             "Alertas $($Health.Name): " + ($Health.Warnings -join "; ")
-        )
+        ) -NoWrap
     }
 
     if ($Health.Deep) {
@@ -994,7 +1049,7 @@ function Write-DistroHealth {
             "/tmp escrita: $($Health.TmpWritable) | " +
             "`$HOME escrita: $($Health.HomeWritable) | " +
             "erros find: $($Health.FindErrorCount)"
-        )
+        ) -NoWrap
 
         if (-not [string]::IsNullOrWhiteSpace($Health.RootMountOptions)) {
             Write-Status -Level "INFO" -Message "Mount / $($Health.Name): $($Health.RootMountOptions)"
