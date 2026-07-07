@@ -155,6 +155,12 @@ D:\config_wsl\backup_distro_wsl\backup_all\launchers\Executar_Mega_Backup_WSL.cm
 A interface grafica pronta fica em `dist\MegaBackupWsl.exe` e chama o motor PowerShell em `scripts\Mega_Backup_WSL.ps1`.
 
 <p align="center">
+  <img src="assets/mega-backup-wsl-logo.png" alt="Logo do executavel Mega Backup WSL" width="180">
+  <br>
+  <sub>Logo embutida em `dist\MegaBackupWsl.exe`.</sub>
+</p>
+
+<p align="center">
   <img src="assets/interface-wpf-saude.png" alt="Interface WPF do Mega Backup WSL com graficos de saude das distros" width="100%">
   <br>
   <sub>Preview da aba Saude com dados demonstrativos.</sub>
@@ -256,6 +262,8 @@ backup_all
 | --- | --- |
 | `scripts\Mega_Backup_WSL.ps1` | Motor principal |
 | `dist\MegaBackupWsl.exe` | Interface grafica pronta para abrir com duplo clique |
+| `assets\mega-backup-wsl.ico` | Icone embutido no executavel |
+| `assets\mega-backup-wsl-logo.png` | Logo fonte usada para gerar o `.ico` |
 | `src\MegaBackupWsl.App` | Interface grafica C#/.NET WPF |
 | `src\MegaBackupWsl.FastWpf` | Fonte da interface WPF rapida, compilada sem SDK |
 | `scripts\Build-MegaBackupWslFastExe.ps1` | Regera `dist\MegaBackupWsl.exe` com o compilador do Windows |

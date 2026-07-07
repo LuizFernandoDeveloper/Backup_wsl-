@@ -8,6 +8,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $sourcePath = Join-Path $repoRoot "src\MegaBackupWsl.FastWpf\MegaBackupWslFastWpf.cs"
 $distDir = Join-Path $repoRoot "dist"
 $outputPath = Join-Path $distDir "MegaBackupWsl.exe"
+$iconPath = Join-Path $repoRoot "assets\mega-backup-wsl.ico"
 $compiler = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 if (-not (Test-Path -LiteralPath $compiler)) {
@@ -43,11 +44,17 @@ foreach ($reference in $references) {
     $referenceArgs += "/reference:$reference"
 }
 
+$iconArgs = @()
+if (Test-Path -LiteralPath $iconPath) {
+    $iconArgs += "/win32icon:$iconPath"
+}
+
 & $compiler `
     /nologo `
     /target:winexe `
     /platform:x64 `
     "/out:$outputPath" `
+    @iconArgs `
     @referenceArgs `
     $sourcePath
 

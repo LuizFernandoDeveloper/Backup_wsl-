@@ -24,6 +24,12 @@ Ela nao substitui o script principal. O app chama:
 scripts\Mega_Backup_WSL.ps1
 ```
 
+A logo do executavel fica em:
+
+```text
+assets\mega-backup-wsl.ico
+```
+
 ## Abrir
 
 ```bat

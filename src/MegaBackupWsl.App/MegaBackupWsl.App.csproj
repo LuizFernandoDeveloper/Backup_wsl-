@@ -8,6 +8,6 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>MegaBackupWsl</AssemblyName>
     <RootNamespace>MegaBackupWsl.App</RootNamespace>
-    <ApplicationIcon />
+    <ApplicationIcon>..\..\assets\mega-backup-wsl.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>
