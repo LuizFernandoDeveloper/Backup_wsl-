@@ -132,6 +132,7 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupM
 | <img src="https://img.shields.io/badge/diagnostico-pesado-ef4444" alt="deep health"> | `Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth` |
 | <img src="https://img.shields.io/badge/full-template-0f766e" alt="full template"> | `Executar_Full_Template.cmd` |
 | <img src="https://img.shields.io/badge/template-gate-16a34a" alt="template"> | `Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template` |
+| <img src="https://img.shields.io/badge/organizar-runs-a855f7" alt="organizar"> | `Executar_Mega_Backup_WSL.cmd -OrganizeRuns` |
 | <img src="https://img.shields.io/badge/retomar-staging-64748b" alt="resume"> | `Executar_Mega_Backup_WSL.cmd -BackupMode All -ResumeRunId RUN_ID` |
 
 > [!TIP]
@@ -168,22 +169,33 @@ D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupM
 
 ## Estrutura Do Backup
 
+Use `Executar_Mega_Backup_WSL.cmd -OrganizeRuns` para mover backups antigos ja publicados para a estrutura por qualidade, sem exportar distros e sem copiar VHDX.
+
 ```text
 F:\Backup\WSl_backup
 |-- LATEST.txt
+|-- LATEST-Template.txt
 |-- logs
 |   `-- Mega_Backup_WSL_RUN_ID.log
 `-- Runs
-    `-- RUN_ID
-        |-- checksums.sha256
-        |-- manifest.json
-        |-- RESTORE_GUIDE.txt
-        |-- resume_state.json
-        |-- distros
-        |   |-- Ubuntu.tar
-        |   `-- kali-linux.tar
-        `-- workspace
-            `-- WSL_Drives.vhdx
+    |-- Basic
+    |   |-- LATEST.txt
+    |   `-- Basic-RUN_ID
+    |-- Standard
+    |   |-- LATEST.txt
+    |   `-- Standard-RUN_ID
+    `-- Template
+        |-- LATEST.txt
+        `-- Template-RUN_ID
+            |-- checksums.sha256
+            |-- manifest.json
+            |-- RESTORE_GUIDE.txt
+            |-- resume_state.json
+            |-- distros
+            |   |-- Ubuntu.tar
+            |   `-- kali-linux.tar
+            `-- workspace
+                `-- WSL_Drives.vhdx
 ```
 
 ## Arquivos Do Projeto

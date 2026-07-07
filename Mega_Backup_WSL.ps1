@@ -11,6 +11,7 @@
     - Modo -HealthOnly para diagnosticar as distros sem backup.
     - Diagnostico pesado opcional com -DeepHealth.
     - Escolha de modo: All, Distros ou Vhdx.
+    - Modo -OrganizeRuns para organizar backups publicados por qualidade.
     - Retomada automatica de backup interrompido em _staging.
     - Limpeza opcional de sockets temporarios com -CleanWslSockets.
     - Opcao -SkipVhdx mantida por compatibilidade.
@@ -49,6 +50,8 @@ param(
     [switch]$DeepHealth,
     [switch]$NoResume,
     [string]$ResumeRunId,
+    [Alias("OrganizarDiretorios")]
+    [switch]$OrganizeRuns,
     [switch]$DryRun
 )
 
@@ -73,6 +76,7 @@ $Config = [ordered]@{
     BackupMode           = $BackupMode
     AutoResume           = -not [bool]$NoResume
     ResumeRunId          = $ResumeRunId
+    OrganizeRuns         = [bool]$OrganizeRuns
 }
 
 if ($Config.SkipVhdx) {
@@ -495,6 +499,61 @@ function Get-SafeFileName {
     }
 
     return $safe
+}
+
+function Get-QualityBucketName {
+    param(
+        [Parameter(Mandatory)]
+        [string]$QualityGate
+    )
+
+    if ($QualityGate -notin @("Basic", "Standard", "Template")) {
+        throw "QualityGate invalido para organizar backup: $QualityGate"
+    }
+
+    return $QualityGate
+}
+
+function Get-RunFolderName {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RunId,
+
+        [Parameter(Mandatory)]
+        [string]$QualityGate
+    )
+
+    $bucketName = Get-QualityBucketName -QualityGate $QualityGate
+    return "$bucketName-$RunId"
+}
+
+function Get-QualityRunsRoot {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RunsRoot,
+
+        [Parameter(Mandatory)]
+        [string]$QualityGate
+    )
+
+    return (Join-Path $RunsRoot (Get-QualityBucketName -QualityGate $QualityGate))
+}
+
+function Get-FinalRunPath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RunsRoot,
+
+        [Parameter(Mandatory)]
+        [string]$RunId,
+
+        [Parameter(Mandatory)]
+        [string]$QualityGate
+    )
+
+    $qualityRunsRoot = Get-QualityRunsRoot -RunsRoot $RunsRoot -QualityGate $QualityGate
+    $runFolderName = Get-RunFolderName -RunId $RunId -QualityGate $QualityGate
+    return (Join-Path $qualityRunsRoot $runFolderName)
 }
 
 function Get-ManagedSha256Hash {
@@ -1833,35 +1892,55 @@ function Update-Latest {
         [string]$BackupRoot,
 
         [Parameter(Mandatory)]
-        [string]$FinalRunPath
+        [string]$FinalRunPath,
+
+        [Parameter(Mandatory)]
+        [string]$QualityGate,
+
+        [string]$RunId = $script:RunId,
+
+        [datetime]$Timestamp = (Get-Date)
     )
 
     $latestPath = Join-Path $BackupRoot "LATEST.txt"
+    $qualityLatestPath = Join-Path $BackupRoot "LATEST-$QualityGate.txt"
+    $qualityRunsLatestPath = Join-Path (Split-Path -Parent $FinalRunPath) "LATEST.txt"
 
-    @"
+    $latestContent = @"
 Ultimo backup WSL concluido com sucesso
 
-Run ID: $script:RunId
-Data: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Run ID: $RunId
+QualityGate: $QualityGate
+Data: $($Timestamp.ToString("yyyy-MM-dd HH:mm:ss"))
 Pasta: $FinalRunPath
-"@ | Set-Content -LiteralPath $latestPath -Encoding UTF8
+"@
+
+    $latestContent | Set-Content -LiteralPath $latestPath -Encoding UTF8
+    $latestContent | Set-Content -LiteralPath $qualityLatestPath -Encoding UTF8
+    $latestContent | Set-Content -LiteralPath $qualityRunsLatestPath -Encoding UTF8
 }
 
 function Remove-OldBackups {
     param(
         [Parameter(Mandatory)]
-        [string]$RunsRoot
+        [string]$QualityRunsRoot,
+
+        [Parameter(Mandatory)]
+        [string]$QualityGate
     )
 
+    $bucketName = Get-QualityBucketName -QualityGate $QualityGate
+    $runNamePattern = "^(?:$([regex]::Escape($bucketName))-)?\d{8}_\d{6}_\d{3}$"
+
     $runs = @(
-        Get-ChildItem -LiteralPath $RunsRoot -Directory |
-            Where-Object { $_.Name -match "^\d{8}_\d{6}_\d{3}$" } |
+        Get-ChildItem -LiteralPath $QualityRunsRoot -Directory |
+            Where-Object { $_.Name -match $runNamePattern } |
             Sort-Object LastWriteTime -Descending
     )
 
     if ($runs.Count -le $Config.KeepLastRuns) {
         Write-Status -Level "INFO" -Message (
-            "Retencao: $($runs.Count) backup(s) existente(s). " +
+            "Retencao ${bucketName}: $($runs.Count) backup(s) existente(s). " +
             "Nada para remover."
         )
 
@@ -1871,7 +1950,7 @@ function Remove-OldBackups {
     $oldRuns = $runs | Select-Object -Skip $Config.KeepLastRuns
 
     foreach ($run in $oldRuns) {
-        Assert-ChildPath -Parent $RunsRoot -Child $run.FullName
+        Assert-ChildPath -Parent $QualityRunsRoot -Child $run.FullName
 
         Write-Status -Level "WARN" -Message "Removendo backup antigo: $($run.FullName)"
 
@@ -1881,6 +1960,247 @@ function Remove-OldBackups {
             -Force
 
         Write-Status -Level "OK" -Message "Backup antigo removido: $($run.Name)"
+    }
+}
+
+function Get-PublishedRunId {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    if ($Name -match "^(?:Basic|Standard|Template)-(?<RunId>\d{8}_\d{6}_\d{3})$") {
+        return $Matches.RunId
+    }
+
+    if ($Name -match "^(?<RunId>\d{8}_\d{6}_\d{3})$") {
+        return $Matches.RunId
+    }
+
+    return $null
+}
+
+function Get-PublishedRunQualityGate {
+    param(
+        [Parameter(Mandatory)]
+        [System.IO.DirectoryInfo]$RunDirectory
+    )
+
+    $manifestPath = Join-Path $RunDirectory.FullName "manifest.json"
+
+    if (Test-Path -LiteralPath $manifestPath) {
+        try {
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            $qualityGate = $null
+
+            $configProperty = $manifest.PSObject.Properties["Config"]
+            if ($null -ne $configProperty -and $null -ne $configProperty.Value) {
+                $qualityProperty = $configProperty.Value.PSObject.Properties["QualityGate"]
+
+                if ($null -ne $qualityProperty) {
+                    $qualityGate = [string]$qualityProperty.Value
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($qualityGate)) {
+                $qualityProperty = $manifest.PSObject.Properties["QualityGate"]
+
+                if ($null -ne $qualityProperty) {
+                    $qualityGate = [string]$qualityProperty.Value
+                }
+            }
+
+            if ($qualityGate -in @("Basic", "Standard", "Template")) {
+                return $qualityGate
+            }
+        }
+        catch {
+            Write-Status -Level "WARN" -Message "Nao foi possivel ler QualityGate do manifesto: $manifestPath"
+        }
+    }
+
+    if ($RunDirectory.Name -match "^(?<QualityGate>Basic|Standard|Template)-\d{8}_\d{6}_\d{3}$") {
+        return $Matches.QualityGate
+    }
+
+    Write-Status -Level "WARN" -Message "QualityGate nao identificado para $($RunDirectory.Name); usando Standard."
+    return "Standard"
+}
+
+function Get-OrganizedRunInventory {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RunsRoot
+    )
+
+    $runs = New-Object System.Collections.Generic.List[object]
+
+    foreach ($qualityGate in @("Basic", "Standard", "Template")) {
+        $qualityRunsRoot = Get-QualityRunsRoot `
+            -RunsRoot $RunsRoot `
+            -QualityGate $qualityGate
+
+        if (-not (Test-Path -LiteralPath $qualityRunsRoot -PathType Container)) {
+            continue
+        }
+
+        foreach ($runDirectory in @(Get-ChildItem -LiteralPath $qualityRunsRoot -Directory -ErrorAction SilentlyContinue)) {
+            $runId = Get-PublishedRunId -Name $runDirectory.Name
+
+            if ([string]::IsNullOrWhiteSpace($runId)) {
+                continue
+            }
+
+            $runs.Add([PSCustomObject]@{
+                    QualityGate   = $qualityGate
+                    RunId         = $runId
+                    FullName      = $runDirectory.FullName
+                    LastWriteTime = $runDirectory.LastWriteTime
+                })
+        }
+    }
+
+    return @($runs.ToArray())
+}
+
+function Update-LatestFromOrganizedRuns {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BackupRoot,
+
+        [Parameter(Mandatory)]
+        [string]$RunsRoot,
+
+        [switch]$DryRun
+    )
+
+    $runs = @(Get-OrganizedRunInventory -RunsRoot $RunsRoot)
+
+    if ($runs.Count -eq 0) {
+        Write-Status -Level "WARN" -Message "Nenhum backup organizado encontrado para atualizar LATEST."
+        return
+    }
+
+    foreach ($qualityGate in @("Basic", "Standard", "Template")) {
+        $latestForQuality = @($runs | Where-Object { $_.QualityGate -eq $qualityGate } | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+
+        if ($latestForQuality.Count -eq 0) {
+            continue
+        }
+
+        if ($DryRun.IsPresent) {
+            Write-Status -Level "INFO" -Message "DryRun: atualizaria LATEST-$qualityGate.txt para $($latestForQuality[0].FullName)"
+            continue
+        }
+
+        Update-Latest `
+            -BackupRoot $BackupRoot `
+            -FinalRunPath $latestForQuality[0].FullName `
+            -QualityGate $qualityGate `
+            -RunId $latestForQuality[0].RunId `
+            -Timestamp $latestForQuality[0].LastWriteTime
+    }
+
+    $latestOverall = @($runs | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+
+    if ($latestOverall.Count -eq 0 -or $DryRun.IsPresent) {
+        return
+    }
+
+    Update-Latest `
+        -BackupRoot $BackupRoot `
+        -FinalRunPath $latestOverall[0].FullName `
+        -QualityGate $latestOverall[0].QualityGate `
+        -RunId $latestOverall[0].RunId `
+        -Timestamp $latestOverall[0].LastWriteTime
+}
+
+function Organize-RunDirectories {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BackupRoot,
+
+        [Parameter(Mandatory)]
+        [string]$RunsRoot,
+
+        [switch]$DryRun
+    )
+
+    if (-not (Test-Path -LiteralPath $RunsRoot -PathType Container)) {
+        Write-Status -Level "WARN" -Message "Pasta Runs ainda nao existe: $RunsRoot"
+        return
+    }
+
+    $qualityNames = @("Basic", "Standard", "Template")
+
+    foreach ($qualityGate in $qualityNames) {
+        $qualityRunsRoot = Get-QualityRunsRoot `
+            -RunsRoot $RunsRoot `
+            -QualityGate $qualityGate
+
+        if (-not $DryRun.IsPresent -and -not (Test-Path -LiteralPath $qualityRunsRoot)) {
+            New-Item -ItemType Directory -Path $qualityRunsRoot -Force | Out-Null
+        }
+    }
+
+    $candidates = @(
+        Get-ChildItem -LiteralPath $RunsRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notin $qualityNames } |
+            Sort-Object LastWriteTime
+    )
+
+    if ($candidates.Count -eq 0) {
+        Write-Status -Level "OK" -Message "Organizacao: nenhuma pasta solta encontrada em Runs."
+        if ($DryRun.IsPresent) {
+            Write-Status -Level "INFO" -Message "DryRun: LATEST nao sera atualizado."
+        }
+        else {
+            Update-LatestFromOrganizedRuns `
+                -BackupRoot $BackupRoot `
+                -RunsRoot $RunsRoot
+        }
+        return
+    }
+
+    foreach ($candidate in $candidates) {
+        $runId = Get-PublishedRunId -Name $candidate.Name
+
+        if ([string]::IsNullOrWhiteSpace($runId)) {
+            Write-Status -Level "WARN" -Message "Ignorando pasta sem formato de backup conhecido: $($candidate.FullName)"
+            continue
+        }
+
+        $qualityGate = Get-PublishedRunQualityGate -RunDirectory $candidate
+        $targetRoot = Get-QualityRunsRoot `
+            -RunsRoot $RunsRoot `
+            -QualityGate $qualityGate
+        $targetName = Get-RunFolderName `
+            -RunId $runId `
+            -QualityGate $qualityGate
+        $targetPath = Join-Path $targetRoot $targetName
+
+        if (Test-Path -LiteralPath $targetPath) {
+            Write-Status -Level "WARN" -Message "Destino ja existe; nao vou sobrescrever: $targetPath"
+            continue
+        }
+
+        if ($DryRun.IsPresent) {
+            Write-Status -Level "INFO" -Message "DryRun: moveria $($candidate.FullName) -> $targetPath"
+            continue
+        }
+
+        New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+        Move-Item -LiteralPath $candidate.FullName -Destination $targetPath
+        Write-Status -Level "OK" -Message "Organizado: $($candidate.Name) -> $qualityGate\$targetName"
+    }
+
+    if ($DryRun.IsPresent) {
+        Write-Status -Level "INFO" -Message "DryRun: LATEST nao sera atualizado."
+    }
+    else {
+        Update-LatestFromOrganizedRuns `
+            -BackupRoot $BackupRoot `
+            -RunsRoot $RunsRoot
     }
 }
 
@@ -1919,6 +2239,33 @@ function Get-StageBackupMode {
     return "All"
 }
 
+function Get-StageQualityGate {
+    param(
+        [Parameter(Mandatory)]
+        [string]$StageRoot,
+
+        [Parameter(Mandatory)]
+        [string]$DefaultQualityGate
+    )
+
+    $statePath = Join-Path $StageRoot "resume_state.json"
+
+    if (Test-Path -LiteralPath $statePath) {
+        try {
+            $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+
+            if ($state.QualityGate -in @("Basic", "Standard", "Template")) {
+                return [string]$state.QualityGate
+            }
+        }
+        catch {
+            Write-Status -Level "WARN" -Message "Nao foi possivel ler QualityGate em $StageRoot."
+        }
+    }
+
+    return $DefaultQualityGate
+}
+
 function Find-ResumeStage {
     param(
         [Parameter(Mandatory)]
@@ -1926,6 +2273,9 @@ function Find-ResumeStage {
 
         [Parameter(Mandatory)]
         [string]$BackupMode,
+
+        [Parameter(Mandatory)]
+        [string]$QualityGate,
 
         [AllowNull()]
         [string]$ResumeRunId
@@ -1938,6 +2288,17 @@ function Find-ResumeStage {
             throw "Staging solicitado para retomada nao encontrado: $explicitStage"
         }
 
+        $explicitStageQualityGate = Get-StageQualityGate `
+            -StageRoot $explicitStage `
+            -DefaultQualityGate $QualityGate
+
+        if ($explicitStageQualityGate -ne $QualityGate) {
+            throw (
+                "Staging solicitado pertence ao QualityGate $explicitStageQualityGate. " +
+                "Execute novamente com -QualityGate $explicitStageQualityGate para retomar."
+            )
+        }
+
         return $explicitStage
     }
 
@@ -1948,8 +2309,11 @@ function Find-ResumeStage {
 
     foreach ($candidate in $candidates) {
         $stageMode = Get-StageBackupMode -StageRoot $candidate.FullName
+        $stageQualityGate = Get-StageQualityGate `
+            -StageRoot $candidate.FullName `
+            -DefaultQualityGate $QualityGate
 
-        if ($stageMode -eq $BackupMode) {
+        if ($stageMode -eq $BackupMode -and $stageQualityGate -eq $QualityGate) {
             return $candidate.FullName
         }
     }
@@ -1971,6 +2335,7 @@ function Write-ResumeState {
     $state = [ordered]@{
         RunId               = $script:RunId
         BackupMode          = $Config.BackupMode
+        QualityGate         = $Config.QualityGate
         UpdatedAt           = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         IncludeDocker       = $Config.IncludeDocker
         CleanWslSockets     = $Config.CleanWslSockets
@@ -2003,6 +2368,7 @@ function New-LogFilePath {
 
 $stageRoot = $null
 $finalRunPath = $null
+$qualityRunsRoot = $null
 $backupCompleted = $false
 $resumingExistingStage = $false
 $distroHealth = @()
@@ -2012,10 +2378,12 @@ $templatePurifiedBeforeHealth = $false
 try {
     Write-Section "MEGA BACKUP WSL - SEGURO E VERSIONADO"
 
-    $needsDistros = ($Config.BackupMode -in @("All", "Distros"))
-    $needsExtraVhdx = ($Config.BackupMode -in @("All", "Vhdx"))
+    $needsDistros = (-not $Config.OrganizeRuns) -and ($Config.BackupMode -in @("All", "Distros"))
+    $needsExtraVhdx = (-not $Config.OrganizeRuns) -and ($Config.BackupMode -in @("All", "Vhdx"))
 
-    Assert-Command -Name "wsl.exe"
+    if (-not $Config.OrganizeRuns) {
+        Assert-Command -Name "wsl.exe"
+    }
 
     if ($needsDistros) {
         Assert-Command -Name "tar.exe"
@@ -2056,10 +2424,19 @@ try {
     Test-WriteAccess -Path $backupRoot
 
     $runsRoot = Join-Path $backupRoot "Runs"
+    $qualityRunsRoot = Get-QualityRunsRoot `
+        -RunsRoot $runsRoot `
+        -QualityGate $Config.QualityGate
     $stagingRoot = Join-Path $backupRoot "_staging"
     $logsRoot = Join-Path $backupRoot "logs"
 
-    foreach ($directory in @($runsRoot, $stagingRoot, $logsRoot)) {
+    $requiredDirectories = @($runsRoot, $stagingRoot, $logsRoot)
+
+    if (-not ($Config.OrganizeRuns -and $DryRun.IsPresent)) {
+        $requiredDirectories += $qualityRunsRoot
+    }
+
+    foreach ($directory in $requiredDirectories) {
         if (-not (Test-Path -LiteralPath $directory)) {
             New-Item -ItemType Directory -Path $directory -Force | Out-Null
         }
@@ -2069,12 +2446,16 @@ try {
         $resumeStage = Find-ResumeStage `
             -StagingRoot $stagingRoot `
             -BackupMode $Config.BackupMode `
+            -QualityGate $Config.QualityGate `
             -ResumeRunId $Config.ResumeRunId
 
         if ($resumeStage) {
             $stageRoot = $resumeStage
             $script:RunId = Get-StageRunId -StageRoot $stageRoot
-            $finalRunPath = Join-Path $runsRoot $script:RunId
+            $finalRunPath = Get-FinalRunPath `
+                -RunsRoot $runsRoot `
+                -RunId $script:RunId `
+                -QualityGate $Config.QualityGate
             $resumingExistingStage = $true
         }
     }
@@ -2092,6 +2473,7 @@ try {
     Write-Status -Level "INFO" -Message "DeepHealth: $($Config.DeepHealth)"
     Write-Status -Level "INFO" -Message "Limpeza de sockets: $($Config.CleanWslSockets)"
     Write-Status -Level "INFO" -Message "PurifyOnly: $($Config.PurifyOnly)"
+    Write-Status -Level "INFO" -Message "OrganizeRuns: $($Config.OrganizeRuns)"
     if ($resumingExistingStage) {
         Write-Status -Level "WARN" -Message "Retomando staging existente: $stageRoot"
     }
@@ -2099,6 +2481,12 @@ try {
     Write-Status -Level "INFO" -Message "Usuario: $env:USERNAME"
     Write-Status -Level "INFO" -Message "PowerShell: $($PSVersionTable.PSVersion)"
     Write-Status -Level "INFO" -Message "Destino: $backupRoot"
+    if ($Config.OrganizeRuns) {
+        Write-Status -Level "INFO" -Message "Pasta Runs: $runsRoot"
+    }
+    else {
+        Write-Status -Level "INFO" -Message "Pasta da qualidade: $qualityRunsRoot"
+    }
     Write-Status -Level "INFO" -Message (
         "Unidade: $($driveInfo.DeviceID) | " +
         "Rotulo: $($driveInfo.Label) | " +
@@ -2111,6 +2499,24 @@ try {
     Write-Status -Level "INFO" -Message "Docker incluido: $($Config.IncludeDocker)"
     Write-Status -Level "INFO" -Message "VHDX extra incluido: $needsExtraVhdx"
     Write-Status -Level "INFO" -Message "Log: $script:LogFile"
+
+    if ($Config.OrganizeRuns) {
+        Write-Section "ORGANIZAR DIRETORIOS DE BACKUP"
+        Organize-RunDirectories `
+            -BackupRoot $backupRoot `
+            -RunsRoot $runsRoot `
+            -DryRun:$DryRun.IsPresent
+
+        $backupCompleted = $true
+
+        $duration = (Get-Date) - $script:RunStart
+
+        Write-Section "CONCLUIDO"
+        Write-Status -Level "OK" -Message "Organizacao concluida sem exportar distros nem copiar VHDX."
+        Write-Status -Level "OK" -Message "Tempo total: $([math]::Round($duration.TotalMinutes, 2)) minuto(s)."
+        Write-Status -Level "OK" -Message "Log final: $script:LogFile"
+        return
+    }
 
     Assert-FreeSpace `
         -BackupRoot $backupRoot `
@@ -2245,13 +2651,21 @@ try {
     else {
         if (-not $resumingExistingStage) {
             $stageRoot = Join-Path $stagingRoot "$script:RunId.partial"
-            $finalRunPath = Join-Path $runsRoot $script:RunId
+            $finalRunPath = Get-FinalRunPath `
+                -RunsRoot $runsRoot `
+                -RunId $script:RunId `
+                -QualityGate $Config.QualityGate
 
             if (Test-Path -LiteralPath $stageRoot) {
                 throw "Staging ja existe: $stageRoot"
             }
 
             New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+        }
+
+        $finalRunParent = Split-Path -Parent $finalRunPath
+        if (-not (Test-Path -LiteralPath $finalRunParent)) {
+            New-Item -ItemType Directory -Path $finalRunParent -Force | Out-Null
         }
 
         if (Test-Path -LiteralPath $finalRunPath) {
@@ -2355,14 +2769,17 @@ try {
 
         Update-Latest `
             -BackupRoot $backupRoot `
-            -FinalRunPath $finalRunPath
+            -FinalRunPath $finalRunPath `
+            -QualityGate $Config.QualityGate
 
         $backupCompleted = $true
 
         Write-Status -Level "OK" -Message "Backup publicado em: $finalRunPath"
 
         try {
-            Remove-OldBackups -RunsRoot $runsRoot
+            Remove-OldBackups `
+                -QualityRunsRoot $qualityRunsRoot `
+                -QualityGate $Config.QualityGate
         }
         catch {
             Write-Status -Level "WARN" -Message "Retencao falhou, mas o backup novo foi concluido: $($_.Exception.Message)"

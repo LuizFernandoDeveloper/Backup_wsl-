@@ -29,12 +29,14 @@ echo  6. Diagnostico pesado das distros
 echo  7. Validar distros como template
 echo  8. Purificar template sem backup
 echo  9. Testar completo sem copiar nada
+echo  A. Organizar diretorios de backup ja publicados
 echo  0. Sair
 echo.
 
-choice /C 1234567890 /N /M "Escolha uma opcao [1-9,0]: "
+choice /C 123456789A0 /N /M "Escolha uma opcao [1-9,A,0]: "
 
-if errorlevel 10 exit /b 0
+if errorlevel 11 exit /b 0
+if errorlevel 10 call "%RUNNER%" -OrganizeRuns %*
 if errorlevel 9 call "%RUNNER%" -BackupMode All -DryRun %*
 if errorlevel 8 call "%RUNNER%" -BackupMode Distros -PurifyOnly -QualityGate Template %*
 if errorlevel 7 call "%RUNNER%" -BackupMode Distros -HealthOnly -QualityGate Template %*

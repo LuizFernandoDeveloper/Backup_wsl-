@@ -14,7 +14,7 @@ flowchart TD
     G --> I["Validar VHDX e SHA-256"]
     H --> J["Manifesto e checksums"]
     I --> J
-    J --> K["Publicar em Runs"]
+    J --> K["Publicar em Runs/QualityGate"]
     K --> L["Atualizar LATEST.txt"]
 ```
 
@@ -33,8 +33,18 @@ O backup so vira oficial quando todas as validacoes passam.
 Depois da validacao:
 
 ```text
-F:\Backup\WSl_backup\Runs\RUN_ID
+F:\Backup\WSl_backup\Runs\Template\Template-RUN_ID
 ```
+
+O mesmo padrao vale para os outros gates:
+
+```text
+F:\Backup\WSl_backup\Runs\Basic\Basic-RUN_ID
+F:\Backup\WSl_backup\Runs\Standard\Standard-RUN_ID
+F:\Backup\WSl_backup\Runs\Template\Template-RUN_ID
+```
+
+`LATEST.txt` aponta para o ultimo backup geral. Tambem sao mantidos `LATEST-Basic.txt`, `LATEST-Standard.txt`, `LATEST-Template.txt` e um `LATEST.txt` dentro da pasta de cada qualidade.
 
 ## Retomada
 
@@ -44,6 +54,8 @@ Se falhar, o staging fica preservado. Na proxima execucao, o script:
 - recalcula hashes;
 - reaproveita VHDX se bater com a origem;
 - refaz apenas o item ausente ou invalido.
+
+A retomada automatica respeita `BackupMode` e `QualityGate`, evitando publicar um staging de template na area de backup normal.
 
 ## Lock
 

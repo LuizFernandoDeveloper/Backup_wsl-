@@ -18,6 +18,7 @@ Opcoes principais:
 7. Validar distros como template
 8. Purificar template sem backup
 9. Testar completo sem copiar nada
+A. Organizar diretorios de backup ja publicados
 0. Sair
 ```
 

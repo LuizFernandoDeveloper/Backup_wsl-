@@ -30,10 +30,35 @@ Executar_Mega_Backup_WSL.cmd -BackupMode Vhdx
 | `-IncludeDocker` | sem valor | Inclui `docker-desktop` |
 | `-ResumeRunId` | `20260707_130726_771` | Retoma um staging especifico |
 | `-NoResume` | sem valor | Desativa retomada automatica |
+| `-OrganizeRuns` | sem valor | Organiza backups ja publicados por qualidade, sem refazer backup |
 | `-BackupRoot` | `"E:\Backups\WSL"` | Altera destino |
 | `-SourceVhdx` | `"D:\x\WSL_Drives.vhdx"` | Altera VHDX extra |
 | `-KeepLastRuns` | `5` | Altera retencao |
 | `-MinimumFreeSpaceGB` | `50` | Altera reserva minima |
+
+## Organizacao Por Qualidade
+
+Backups publicados ficam separados pelo `QualityGate` usado na execucao:
+
+```text
+Runs\Basic\Basic-RUN_ID
+Runs\Standard\Standard-RUN_ID
+Runs\Template\Template-RUN_ID
+```
+
+Isso evita misturar backups emergenciais, normais e templates. A retencao de `-KeepLastRuns` tambem passa a valer dentro da qualidade atual, entao backups `Template` nao apagam backups `Standard`.
+
+Para organizar backups antigos ja publicados sem executar backup novo:
+
+```bat
+Executar_Mega_Backup_WSL.cmd -OrganizeRuns
+```
+
+Para simular antes de mover:
+
+```bat
+Executar_Mega_Backup_WSL.cmd -OrganizeRuns -DryRun
+```
 
 ## Exemplos Prontos
 
