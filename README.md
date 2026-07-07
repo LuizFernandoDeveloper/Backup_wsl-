@@ -1,277 +1,95 @@
-# Mega Backup WSL
+<p align="center">
+  <img src="assets/mega-backup-wsl-banner.svg" alt="Mega Backup WSL" width="100%">
+</p>
 
-Backup seguro, versionado e retomavel para ambientes WSL no Windows.
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2bd8ff?style=for-the-badge"></a>
+  <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1+-244b7a?style=for-the-badge&logo=powershell">
+  <img alt="WSL 2" src="https://img.shields.io/badge/WSL-2-0f172a?style=for-the-badge&logo=linux">
+  <img alt="Backup resumable" src="https://img.shields.io/badge/resume-enabled-16a34a?style=for-the-badge">
+</p>
 
-Este projeto cria backups das suas distribuicoes WSL e tambem do arquivo extra
-`WSL_Drives.vhdx`, com diagnostico de saude das distros, validacao por
-SHA-256, staging, logs e retomada automatica quando uma execucao falha no meio.
+<h1 align="center">Mega Backup WSL</h1>
 
-## Visao geral
+<p align="center">
+  Backup profissional para WSL no Windows: distros como templates, VHDX extra, retomada automatica, health gates e validacao SHA-256.
+</p>
 
-| Item | Descricao |
+## Por Que Existe
+
+O Mega Backup WSL foi criado para resolver um problema bem pratico: manter distros WSL grandes e importantes com backup confiavel, restauravel e reutilizavel como template.
+
+Ele nao apenas copia arquivos. Ele prepara, diagnostica, valida, publica somente quando esta tudo consistente e evita repetir horas de exportacao quando uma execucao falha no meio.
+
+## Destaques
+
+| Recurso | O que entrega |
 | --- | --- |
-| Sistema | Windows + WSL 2 |
-| Script principal | `Mega_Backup_WSL.ps1` |
-| Menu interativo | `Escolher_Backup_WSL.cmd` |
-| Atalho completo | `Executar_Mega_Backup_WSL.cmd` |
-| Atalho VHDX | `Executar_Backup_WSL_Drives_VHDX.cmd` |
-| Destino padrao | `F:\Backup\WSl_backup` |
-| VHDX extra padrao | `D:\disk-removivel-wsl2\WSL_Drives.vhdx` |
-| Retencao padrao | 3 execucoes publicadas |
-| Reserva padrao | 25 GB livres alem da estimativa |
+| Backup completo | Exporta distros WSL e copia `WSL_Drives.vhdx` |
+| Modos selecionaveis | `All`, `Distros` ou `Vhdx` |
+| Templates saudaveis | `QualityGate Template` purifica e bloqueia distros ruins |
+| Diagnostico pesado | Procura read-only, erro de diretorio, falha de escrita, sockets e sinais de filesystem |
+| Retomada automatica | Reaproveita TAR/VHDX ja validos em `_staging` |
+| Integridade | SHA-256, manifesto JSON, checksums e guia de restauracao |
+| Seguranca operacional | Lock de execucao, staging, retencao e logs detalhados |
 
-## Modos de backup
+## Inicio Rapido
 
-O script principal aceita tres modos:
-
-| Modo | O que faz | Exemplo |
-| --- | --- | --- |
-| `All` | Backup das distros WSL + `WSL_Drives.vhdx` | backup completo |
-| `Distros` | Backup somente das distros WSL | sem VHDX extra |
-| `Vhdx` | Backup somente do `WSL_Drives.vhdx` | copia rapida do VHDX |
-
-Por padrao, o modo usado e `All`.
-
-## Como usar
-
-### Opcao recomendada: menu
-
-Execute:
+Use o menu:
 
 ```bat
 D:\config_wsl\backup_distro_wsl\backup_all\Escolher_Backup_WSL.cmd
 ```
 
-O menu permite escolher:
-
-```text
-1. Backup completo: distros + WSL_Drives.vhdx
-2. Backup completo + limpar sockets temporarios
-3. Somente distros WSL
-4. Somente WSL_Drives.vhdx
-5. Saude leve das distros
-6. Diagnostico pesado das distros
-7. Validar distros como template
-8. Purificar template sem backup
-9. Testar completo sem copiar nada
-0. Sair
-```
-
-### Backup completo
-
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd
-```
-
-Equivalente a:
+Ou rode direto:
 
 ```bat
 D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All
 ```
 
-### Somente distros
+Validar e purificar distros para template sem exportar backup:
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros
+D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
 ```
 
-### Somente WSL_Drives.vhdx
-
-Use o atalho direto:
+Gerar backup completo com nivel de template:
 
 ```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Backup_WSL_Drives_VHDX.cmd
+D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
 ```
 
-Ou chame o script principal:
+## Mapa Da Documentacao
 
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Vhdx
-```
+| Topico | Documento |
+| --- | --- |
+| Instalar, testar e executar | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
+| Modos de backup e parametros | [docs/USAGE.md](docs/USAGE.md) |
+| Health gates, templates e purificacao | [docs/HEALTH_GATES.md](docs/HEALTH_GATES.md) |
+| Restaurar distros e criar clones | [docs/RESTORE.md](docs/RESTORE.md) |
+| Arquitetura, staging e retomada | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Erros comuns e diagnostico | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 
-### Testar sem copiar nada
+## Arquivos Principais
 
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All -DryRun
-```
+| Arquivo | Funcao |
+| --- | --- |
+| `Mega_Backup_WSL.ps1` | Motor principal do backup |
+| `Escolher_Backup_WSL.cmd` | Menu interativo |
+| `Executar_Mega_Backup_WSL.cmd` | Atalho para backup geral |
+| `Executar_Backup_WSL_Drives_VHDX.cmd` | Atalho para backup somente do VHDX extra |
+| `README.md` | Visao geral do projeto |
+| `docs/` | Documentacao por topico |
 
-Outros testes:
+## Resultado Esperado
 
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -DryRun
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Vhdx -DryRun
-```
-
-## Saude das distros/templates
-
-As distros exportadas em `.tar` funcionam como templates: voce pode restaurar
-com o mesmo nome ou importar como clone com outro nome. Por isso, antes de
-"congelar" uma distro em backup, o script mostra a saude dela.
-
-### Saude leve
-
-Roda por padrao em backups com distros. Verifica:
-
-- se a distro responde via `sh`;
-- uso de disco em `/`;
-- uso de inodes em `/`;
-- tamanho do `ext4.vhdx` visto pelo Windows;
-- sockets temporarios em `/tmp`, `/var/tmp` e `~/.ssh/agent`.
-
-Para rodar apenas o diagnostico leve:
-
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly
-```
-
-### Diagnostico pesado
-
-Use quando quiser investigar uma distro antes de transforma-la em template.
-Ele pode demorar porque varre o filesystem da distro com `find / -xdev`.
-
-Verifica alem da saude leve:
-
-- sockets no filesystem inteiro da distro;
-- links quebrados;
-- teste de escrita em `/tmp`;
-- teste de escrita no `$HOME`;
-- se `/` parece montado como read-only;
-- erros ao varrer diretorios, ignorando apenas permissoes comuns;
-- sinais recentes no `dmesg`, como `I/O error`, `corrupt`,
-  `read-only file system` e `Structure needs cleaning`;
-- tamanhos de `/tmp`, `/var/tmp`, `/var/cache` e `$HOME/.cache`;
-- maiores diretorios no `/`.
-
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DeepHealth
-```
-
-O alias em portugues tambem funciona:
-
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -DiagnosticoPesado
-```
-
-### Limpar sockets antes do backup
-
-Sockets temporarios podem gerar avisos do `bsdtar` durante `wsl.exe --export`.
-Para preparar as distros antes de exportar, use:
-
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -BackupMode All -CleanWslSockets
-```
-
-Essa limpeza remove somente arquivos do tipo socket em:
-
-```text
-/tmp
-/var/tmp
-~/.ssh/agent
-```
-
-Ela nao apaga chaves SSH, arquivos comuns, projetos ou caches.
-
-## Niveis de exigencia
-
-Use `-QualityGate` para decidir o quanto a saude da distro deve bloquear o
-backup.
-
-| Nivel | Uso indicado | Comportamento |
-| --- | --- | --- |
-| `Basic` | Backup emergencial | Relata problemas, mas quase nao bloqueia |
-| `Standard` | Backup normal | Bloqueia problemas criticos, como read-only, falha de escrita ou erro real de filesystem |
-| `Template` | Criar base limpa para clones | No backup real, purifica antes; liga `-DeepHealth` automaticamente; bloqueia sockets, read-only, erros de diretorio, pouco espaco e sinais fortes de filesystem ruim |
-
-Backup normal com regra padrao:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Standard
-```
-
-Validar se as distros estao boas para virar template:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros -HealthOnly -QualityGate Template
-```
-
-Gerar backup/template com purificacao automatica:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode All -QualityGate Template
-```
-
-Purificar e validar sem exportar backup:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -BackupMode Distros -PurifyOnly -QualityGate Template
-```
-
-No modo real de template, o script:
-
-- remove sockets temporarios em `/tmp`, `/var/tmp` e agentes SSH;
-- tenta rotacionar e reduzir journald para 7 dias quando `journalctl` existe;
-- roda `sync`;
-- executa o diagnostico pesado depois da limpeza;
-- bloqueia a exportacao se ainda houver problema grave.
-
-`-HealthOnly -QualityGate Template` valida, mas nao publica backup. Para manter o diagnostico como leitura, use esse modo antes do backup real.
-
-## O que o script faz por seguranca
-
-- Desliga o WSL com `wsl.exe --shutdown` antes de copiar/exportar.
-- Exporta distros para `.tar` usando `wsl.exe --export`.
-- Mostra a saude de cada distro antes de exportar.
-- Pode bloquear backups/templates ruins com `-QualityGate`.
-- Pode limpar sockets temporarios com `-CleanWslSockets`.
-- Valida a estrutura dos `.tar` com `tar.exe -tf`.
-- Copia o VHDX extra com `robocopy.exe`.
-- Calcula SHA-256 dos `.tar` e do `.vhdx`.
-- Usa pasta `_staging` antes de publicar o backup.
-- So move para `Runs` depois que relatorios e validacoes passam.
-- Cria lock para impedir duas execucoes simultaneas.
-- Nunca apaga backups antigos quando a execucao atual falha.
-- Mantem os ultimos backups publicados conforme `-KeepLastRuns`.
-
-## Retomada automatica
-
-Se uma execucao falhar, o staging fica preservado em:
-
-```text
-F:\Backup\WSl_backup\_staging\RUN_ID.partial
-```
-
-Na proxima execucao do mesmo modo, o script procura esse staging e reaproveita
-o que ja estiver pronto:
-
-- `.tar` ja exportado: valida o TAR, recalcula SHA-256 e pula a exportacao.
-- `WSL_Drives.vhdx` ja copiado: compara tamanho e SHA-256 com a origem.
-- Arquivo incompleto ou divergente: refaz somente aquele item.
-
-Isso evita repetir horas de exportacao quando a falha aconteceu no final, como
-na etapa de relatorios.
-
-Para desativar retomada:
-
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -NoResume
-```
-
-Para retomar um staging especifico:
-
-```bat
-D:\config_wsl\backup_distro_wsl\backup_all\Executar_Mega_Backup_WSL.cmd -ResumeRunId 20260706_220357_630
-```
-
-## Estrutura gerada
-
-Backup publicado:
+Um backup publicado fica assim:
 
 ```text
 F:\Backup\WSl_backup
 |-- LATEST.txt
 |-- logs
-|   |-- Mega_Backup_WSL_RUN_ID.log
-|   `-- Mega_Backup_WSL_RUN_ID_resume_DATA.log
+|   `-- Mega_Backup_WSL_RUN_ID.log
 `-- Runs
     `-- RUN_ID
         |-- checksums.sha256
@@ -280,124 +98,22 @@ F:\Backup\WSl_backup
         |-- resume_state.json
         |-- distros
         |   |-- Ubuntu.tar
-        |   |-- kali-linux.tar
-        |   `-- gentoo-current-systemd.tar
+        |   `-- kali-linux.tar
         `-- workspace
             `-- WSL_Drives.vhdx
 ```
 
-Falha preservada para retomada:
+## Fontes E Referencias
 
-```text
-F:\Backup\WSl_backup
-`-- _staging
-    `-- RUN_ID.partial
-        |-- FAILED.json
-        |-- resume_state.json
-        |-- distros
-        `-- workspace
-```
-
-## Arquivos de relatorio
-
-| Arquivo | Para que serve |
-| --- | --- |
-| `manifest.json` | Inventario completo da execucao, opcoes, destino e hashes |
-| `checksums.sha256` | Lista de hashes SHA-256 para conferir integridade |
-| `RESTORE_GUIDE.txt` | Comandos prontos para restaurar as distros |
-| `LATEST.txt` | Aponta para o ultimo backup publicado com sucesso |
-| `FAILED.json` | Aparece apenas no staging quando uma execucao falha |
-
-## Restauracao
-
-Cada backup publicado gera um `RESTORE_GUIDE.txt` com comandos prontos.
-
-Fluxo geral:
-
-```bat
-wsl.exe --shutdown
-wsl.exe --import "NomeDaDistro" "D:\WSL-Restored\NomeDaDistro" "F:\Backup\WSl_backup\Runs\RUN_ID\distros\NomeDaDistro.tar" --version 2
-```
-
-Usar o TAR como template/clone:
-
-```bat
-wsl.exe --import "NomeDaDistro-clone" "D:\WSL-Restored\NomeDaDistro-clone" "F:\Backup\WSl_backup\Runs\RUN_ID\distros\NomeDaDistro.tar" --version 2
-```
-
-Antes de restaurar, confira os hashes:
-
-```powershell
-Get-FileHash "F:\Backup\WSl_backup\Runs\RUN_ID\distros\Ubuntu.tar" -Algorithm SHA256
-```
-
-Compare com o valor em:
-
-```text
-F:\Backup\WSl_backup\Runs\RUN_ID\checksums.sha256
-```
-
-## Opcoes avancadas
-
-Alterar destino:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -BackupRoot "E:\Backups\WSL"
-```
-
-Alterar VHDX extra:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -SourceVhdx "D:\outro\WSL_Drives.vhdx"
-```
-
-Incluir distros do Docker:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -IncludeDocker
-```
-
-Validar rotulo da unidade:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -ExpectedVolumeLabel "WSL_BACKUP"
-```
-
-Alterar retencao:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -KeepLastRuns 5
-```
-
-Alterar reserva minima:
-
-```bat
-Executar_Mega_Backup_WSL.cmd -MinimumFreeSpaceGB 50
-```
-
-## Melhorias pesquisadas para proximas versoes
-
-Estas ideias vieram da documentacao oficial do WSL da Microsoft:
-
-- Exportar distros tambem em formato VHD com `wsl --export <Distro> <Arquivo> --format vhd`.
-- Importar VHD diretamente com `wsl --import <Distro> <Local> <Arquivo> --vhd`.
-- Mostrar `wsl --list --verbose` no inventario para registrar estado e versao WSL.
-- Adicionar rotina opcional de compactacao/otimizacao de VHDX depois de limpeza pesada.
-- Criar um comando "template publish" para marcar backups bons como templates recomendados.
-
-Referencias:
+Este projeto segue os fluxos oficiais de `wsl.exe --export`, `wsl.exe --import`, `wsl.exe --shutdown` e manejo de disco WSL descritos pela Microsoft:
 
 - [Basic commands for WSL](https://learn.microsoft.com/en-us/windows/wsl/basic-commands)
 - [FAQ about WSL](https://learn.microsoft.com/en-us/windows/wsl/faq)
 - [How to manage WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space)
 - [Troubleshooting WSL](https://learn.microsoft.com/en-us/windows/wsl/troubleshooting)
 
-## Observacoes importantes
+A escolha de licenca segue o padrao MIT visto no repositorio de referencia [LuizFernandoDeveloper/LandpageDisneyPlus](https://github.com/LuizFernandoDeveloper/LandpageDisneyPlus).
 
-- O backup real pode demorar bastante em distros grandes.
-- O diagnostico pesado tambem pode demorar, porque varre diretorios dentro da distro.
-- Feche terminais e servicos importantes antes de rodar, pois o script desliga o WSL.
-- Por padrao, `docker-desktop` e `docker-desktop-data` ficam fora do backup.
-- O `.cmd` usa `RemoteSigned` apenas no processo atual do PowerShell.
-- O script nao usa `ExecutionPolicy Bypass`.
-- Se o Git nao estiver no PATH do Windows, o repositorio ainda pode ser atualizado pelo Git dentro do WSL.
+## Licenca
+
+Distribuido sob a licenca MIT. Veja [LICENSE](LICENSE).
