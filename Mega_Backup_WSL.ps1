@@ -8,8 +8,11 @@
     Melhorias principais:
     - Parametros para destino, VHDX, retencao e reserva de espaco.
     - Modo -DryRun com inventario e estimativa, sem exportar nem copiar.
+    - Modo -HealthOnly para diagnosticar as distros sem backup.
+    - Diagnostico pesado opcional com -DeepHealth.
     - Escolha de modo: All, Distros ou Vhdx.
     - Retomada automatica de backup interrompido em _staging.
+    - Limpeza opcional de sockets temporarios com -CleanWslSockets.
     - Opcao -SkipVhdx mantida por compatibilidade.
     - Estimativa conservadora de espaco usando os ext4.vhdx das distros.
     - Staging: so publica o backup depois de validar arquivos e hashes.
@@ -34,8 +37,16 @@ param(
     [ValidateSet("All", "Distros", "Vhdx")]
     [string]$BackupMode = "All",
 
+    [ValidateSet("Basic", "Standard", "Template")]
+    [string]$QualityGate = "Standard",
+
     [switch]$IncludeDocker,
     [switch]$SkipVhdx,
+    [switch]$CleanWslSockets,
+    [switch]$PurifyOnly,
+    [switch]$HealthOnly,
+    [Alias("DiagnosticoPesado")]
+    [switch]$DeepHealth,
     [switch]$NoResume,
     [string]$ResumeRunId,
     [switch]$DryRun
@@ -54,6 +65,11 @@ $Config = [ordered]@{
     HashAlgorithm        = "SHA256"
     IncludeDocker        = [bool]$IncludeDocker
     SkipVhdx             = [bool]$SkipVhdx
+    QualityGate          = $QualityGate
+    CleanWslSockets      = [bool]$CleanWslSockets
+    PurifyOnly           = [bool]$PurifyOnly
+    HealthOnly           = [bool]$HealthOnly
+    DeepHealth           = [bool]$DeepHealth
     BackupMode           = $BackupMode
     AutoResume           = -not [bool]$NoResume
     ResumeRunId          = $ResumeRunId
@@ -69,6 +85,14 @@ if ($Config.SkipVhdx) {
 
 if ($NoResume.IsPresent -and -not [string]::IsNullOrWhiteSpace($ResumeRunId)) {
     throw "Use -NoResume ou -ResumeRunId, nao os dois ao mesmo tempo."
+}
+
+if ($Config.QualityGate -eq "Template") {
+    $Config.DeepHealth = $true
+}
+
+if ($Config.PurifyOnly) {
+    $Config.DeepHealth = $true
 }
 
 $script:RunId = Get-Date -Format "yyyyMMdd_HHmmss_fff"
@@ -402,6 +426,601 @@ function Get-WslDistros {
     return $distros
 }
 
+function ConvertTo-Int64Default {
+    param(
+        [AllowNull()]
+        [object]$Value,
+
+        [Int64]$Default = 0
+    )
+
+    $parsed = [Int64]0
+
+    if ($null -ne $Value -and [Int64]::TryParse(([string]$Value).Trim(), [ref]$parsed)) {
+        return $parsed
+    }
+
+    return $Default
+}
+
+function ConvertTo-PercentInt {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    $clean = ([string]$Value).Trim().TrimEnd([char]'%')
+    return [int](ConvertTo-Int64Default -Value $clean -Default 0)
+}
+
+function Convert-KeyValueLines {
+    param(
+        [array]$Lines
+    )
+
+    $map = @{}
+
+    foreach ($line in @($Lines)) {
+        $text = ([string]$line).Replace([string][char]0, "").Trim()
+
+        if ($text -match "^([^=]+)=(.*)$") {
+            $map[$Matches[1]] = $Matches[2]
+        }
+    }
+
+    return $map
+}
+
+function Invoke-WslDistroCommand {
+    param(
+        [Parameter(Mandatory)]
+        [string]$DistroName,
+
+        [Parameter(Mandatory)]
+        [string]$Command,
+
+        [string]$User = ""
+    )
+
+    $id = [guid]::NewGuid().ToString("N")
+    $stdoutPath = Join-Path $env:TEMP "wsl_backup_$id.stdout.log"
+    $stderrPath = Join-Path $env:TEMP "wsl_backup_$id.stderr.log"
+    $scriptPath = Join-Path $env:TEMP "wsl_backup_$id.sh"
+
+    try {
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($scriptPath, $Command, $utf8NoBom)
+
+        $fullScriptPath = [System.IO.Path]::GetFullPath($scriptPath)
+        $driveLetter = $fullScriptPath.Substring(0, 1).ToLowerInvariant()
+        $pathRest = $fullScriptPath.Substring(2).Replace("\", "/")
+        $wslScriptPath = "/mnt/$driveLetter$pathRest"
+
+        try {
+            if ([string]::IsNullOrWhiteSpace($User)) {
+                & wsl.exe -d $DistroName -- sh $wslScriptPath 1>$stdoutPath 2>$stderrPath
+            }
+            else {
+                & wsl.exe -d $DistroName -u $User -- sh $wslScriptPath 1>$stdoutPath 2>$stderrPath
+            }
+
+            $exitCode = $LASTEXITCODE
+        }
+        catch {
+            $exitCode = 1
+            Add-Content -LiteralPath $stderrPath -Value $_.Exception.Message -Encoding UTF8
+        }
+
+        return [PSCustomObject]@{
+            ExitCode = [int]$exitCode
+            Stdout   = @(Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue)
+            Stderr   = @(Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue)
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath, $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-WslDistroHealth {
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Distro,
+
+        [switch]$Deep
+    )
+
+    $command = @'
+root_df=$(df -P / 2>/dev/null | awk 'NR==2 {print $2 "|" $3 "|" $4 "|" $5}')
+inode_df=$(df -Pi / 2>/dev/null | awk 'NR==2 {print $2 "|" $3 "|" $4 "|" $5}')
+tmp_sockets=$(find /tmp -xdev -type s 2>/dev/null | wc -l | tr -d " ")
+var_tmp_sockets=$(find /var/tmp -xdev -type s 2>/dev/null | wc -l | tr -d " ")
+ssh_sockets=$(find "$HOME/.ssh/agent" -type s 2>/dev/null | wc -l | tr -d " ")
+printf 'ROOT_DF=%s\n' "$root_df"
+printf 'INODE_DF=%s\n' "$inode_df"
+printf 'TMP_SOCKETS=%s\n' "${tmp_sockets:-0}"
+printf 'VAR_TMP_SOCKETS=%s\n' "${var_tmp_sockets:-0}"
+printf 'SSH_AGENT_SOCKETS=%s\n' "${ssh_sockets:-0}"
+'@
+
+    if ($Deep.IsPresent) {
+        $command += @'
+all_sockets=$(find / -xdev -type s 2>/dev/null | wc -l | tr -d " ")
+broken_links=$(find / -xdev -xtype l 2>/dev/null | wc -l | tr -d " ")
+cache_sizes=$(du -xsk /tmp /var/tmp /var/cache "$HOME/.cache" 2>/dev/null | awk '{printf "%s:%s,", $2, $1}')
+top_root_dirs=$(du -xk --max-depth=1 / 2>/dev/null | sort -nr | head -8 | awk '{printf "%s:%s,", $2, $1}')
+root_options=$(findmnt -no OPTIONS / 2>/dev/null || mount | awk '$3=="/"{print $6; exit}')
+case ",$root_options," in
+  *,ro,*|*\(ro,*|*,ro\)*) root_readonly=1 ;;
+  *) root_readonly=0 ;;
+esac
+tmp_writable=0
+tmp_probe=$(mktemp /tmp/wsl-backup-health.XXXXXX 2>/dev/null)
+if [ -n "$tmp_probe" ] && printf test > "$tmp_probe" 2>/dev/null; then
+  tmp_writable=1
+  rm -f "$tmp_probe" 2>/dev/null
+fi
+home_writable=0
+home_probe="$HOME/.wsl-backup-health.$$"
+if printf test > "$home_probe" 2>/dev/null; then
+  home_writable=1
+  rm -f "$home_probe" 2>/dev/null
+fi
+find_errors=$(find / -xdev -type d -print >/dev/null 2>&1 | grep -Eiv 'Permission denied|Operation not permitted' | head -20 | sed 's/|/ /g' | tr '\n' '|')
+find_error_count=$(find / -xdev -type d -print >/dev/null 2>&1 | grep -Eiv 'Permission denied|Operation not permitted' | wc -l | tr -d " ")
+dmesg_issues=$(dmesg 2>/dev/null | grep -Ei 'EXT4-fs error|EXT4-fs warning|I/O error|Buffer I/O error|blk_update_request|read-only file system|Structure needs cleaning|metadata_csum|orphan linked list' | tail -20 | sed 's/|/ /g' | tr '\n' '|')
+printf 'ALL_SOCKETS=%s\n' "${all_sockets:-0}"
+printf 'BROKEN_LINKS=%s\n' "${broken_links:-0}"
+printf 'CACHE_SIZES=%s\n' "$cache_sizes"
+printf 'TOP_ROOT_DIRS=%s\n' "$top_root_dirs"
+printf 'ROOT_OPTIONS=%s\n' "$root_options"
+printf 'ROOT_READONLY=%s\n' "$root_readonly"
+printf 'TMP_WRITABLE=%s\n' "$tmp_writable"
+printf 'HOME_WRITABLE=%s\n' "$home_writable"
+printf 'FIND_ERROR_COUNT=%s\n' "${find_error_count:-0}"
+printf 'FIND_ERRORS=%s\n' "$find_errors"
+printf 'DMESG_ISSUES=%s\n' "$dmesg_issues"
+'@
+    }
+
+    $result = Invoke-WslDistroCommand -DistroName $Distro.Name -Command $command
+    $map = Convert-KeyValueLines -Lines $result.Stdout
+
+    $rootValue = ""
+    if ($map.ContainsKey("ROOT_DF")) {
+        $rootValue = [string]$map["ROOT_DF"]
+    }
+
+    $rootParts = @($rootValue -split "\|")
+    while ($rootParts.Count -lt 4) {
+        $rootParts += ""
+    }
+
+    $inodeValue = ""
+    if ($map.ContainsKey("INODE_DF")) {
+        $inodeValue = [string]$map["INODE_DF"]
+    }
+
+    $inodeParts = @($inodeValue -split "\|")
+    while ($inodeParts.Count -lt 4) {
+        $inodeParts += ""
+    }
+
+    $rootTotalBytes = (ConvertTo-Int64Default -Value $rootParts[0]) * 1KB
+    $rootUsedBytes = (ConvertTo-Int64Default -Value $rootParts[1]) * 1KB
+    $rootFreeBytes = (ConvertTo-Int64Default -Value $rootParts[2]) * 1KB
+    $rootUsedPercent = ConvertTo-PercentInt -Value $rootParts[3]
+    $inodeUsedPercent = ConvertTo-PercentInt -Value $inodeParts[3]
+
+    $tmpSockets = ConvertTo-Int64Default -Value $map["TMP_SOCKETS"]
+    $varTmpSockets = ConvertTo-Int64Default -Value $map["VAR_TMP_SOCKETS"]
+    $sshSockets = ConvertTo-Int64Default -Value $map["SSH_AGENT_SOCKETS"]
+    $temporarySockets = $tmpSockets + $varTmpSockets + $sshSockets
+    $allSockets = ConvertTo-Int64Default -Value $map["ALL_SOCKETS"] -Default $temporarySockets
+    $brokenLinks = ConvertTo-Int64Default -Value $map["BROKEN_LINKS"]
+    $rootReadOnly = (ConvertTo-Int64Default -Value $map["ROOT_READONLY"]) -eq 1
+    $tmpWritable = (ConvertTo-Int64Default -Value $map["TMP_WRITABLE"] -Default 1) -eq 1
+    $homeWritable = (ConvertTo-Int64Default -Value $map["HOME_WRITABLE"] -Default 1) -eq 1
+    $findErrorCount = ConvertTo-Int64Default -Value $map["FIND_ERROR_COUNT"]
+
+    $warnings = @()
+
+    if ($result.ExitCode -ne 0) {
+        $warnings += "distro nao respondeu via sh"
+    }
+
+    if ($rootUsedPercent -ge 90) {
+        $warnings += "uso de disco alto ($rootUsedPercent%)"
+    }
+
+    if ($inodeUsedPercent -ge 90) {
+        $warnings += "uso de inodes alto ($inodeUsedPercent%)"
+    }
+
+    if ($temporarySockets -gt 0) {
+        $warnings += "$temporarySockets socket(s) temporario(s)"
+    }
+
+    if ($Deep.IsPresent -and $allSockets -gt $temporarySockets) {
+        $warnings += "$($allSockets - $temporarySockets) socket(s) fora dos locais temporarios"
+    }
+
+    if ($Deep.IsPresent -and $rootReadOnly) {
+        $warnings += "filesystem raiz montado como read-only"
+    }
+
+    if ($Deep.IsPresent -and -not $tmpWritable) {
+        $warnings += "/tmp nao aceitou escrita"
+    }
+
+    if ($Deep.IsPresent -and -not $homeWritable) {
+        $warnings += "`$HOME nao aceitou escrita"
+    }
+
+    if ($Deep.IsPresent -and $findErrorCount -gt 0) {
+        $warnings += "$findErrorCount erro(s) ao varrer diretorios"
+    }
+
+    if ($Deep.IsPresent -and -not [string]::IsNullOrWhiteSpace([string]$map["DMESG_ISSUES"])) {
+        $warnings += "dmesg tem sinais de erro/corrupcao/read-only"
+    }
+
+    $status = "OK"
+
+    if ($result.ExitCode -ne 0) {
+        $status = "ERROR"
+    }
+    elseif ($warnings.Count -gt 0) {
+        $status = "WARN"
+    }
+
+    return [PSCustomObject]@{
+        Name                  = $Distro.Name
+        Status                = $status
+        WslCommandExitCode    = $result.ExitCode
+        SourceVhdx            = $Distro.SourceVhdx
+        SourceVhdxBytes       = [Int64]$Distro.SourceVhdxBytes
+        SourceVhdxSize        = $Distro.SourceVhdxSize
+        RootTotalBytes        = [Int64]$rootTotalBytes
+        RootUsedBytes         = [Int64]$rootUsedBytes
+        RootFreeBytes         = [Int64]$rootFreeBytes
+        RootUsedPercent       = [int]$rootUsedPercent
+        InodeUsedPercent      = [int]$inodeUsedPercent
+        TmpSockets            = [Int64]$tmpSockets
+        VarTmpSockets         = [Int64]$varTmpSockets
+        SshAgentSockets       = [Int64]$sshSockets
+        TemporarySockets      = [Int64]$temporarySockets
+        AllSockets            = [Int64]$allSockets
+        BrokenLinks           = [Int64]$brokenLinks
+        RootMountOptions      = [string]$map["ROOT_OPTIONS"]
+        RootReadOnly          = [bool]$rootReadOnly
+        TmpWritable           = [bool]$tmpWritable
+        HomeWritable          = [bool]$homeWritable
+        FindErrorCount        = [Int64]$findErrorCount
+        FindErrors            = [string]$map["FIND_ERRORS"]
+        DmesgIssues           = [string]$map["DMESG_ISSUES"]
+        CacheSizes            = [string]$map["CACHE_SIZES"]
+        TopRootDirs           = [string]$map["TOP_ROOT_DIRS"]
+        Warnings              = @($warnings)
+        Stderr                = @($result.Stderr)
+        Deep                  = [bool]$Deep
+    }
+}
+
+function Write-DistroHealth {
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Health
+    )
+
+    $level = switch ($Health.Status) {
+        "OK" { "OK" }
+        "WARN" { "WARN" }
+        default { "ERROR" }
+    }
+
+    Write-Status -Level $level -Message (
+        "Saude $($Health.Name): $($Health.Status) | " +
+        "/ usado: $($Health.RootUsedPercent)% | " +
+        "/ livre: $(Format-Size $Health.RootFreeBytes) | " +
+        "inodes: $($Health.InodeUsedPercent)% | " +
+        "sockets temporarios: $($Health.TemporarySockets) | " +
+        "VHDX: $($Health.SourceVhdxSize)"
+    )
+
+    if ($Health.Warnings.Count -gt 0) {
+        Write-Status -Level "WARN" -Message (
+            "Alertas $($Health.Name): " + ($Health.Warnings -join "; ")
+        )
+    }
+
+    if ($Health.Deep) {
+        Write-Status -Level "INFO" -Message (
+            "Diagnostico pesado $($Health.Name): " +
+            "sockets totais: $($Health.AllSockets) | " +
+            "links quebrados: $($Health.BrokenLinks) | " +
+            "root read-only: $($Health.RootReadOnly) | " +
+            "/tmp escrita: $($Health.TmpWritable) | " +
+            "`$HOME escrita: $($Health.HomeWritable) | " +
+            "erros find: $($Health.FindErrorCount)"
+        )
+
+        if (-not [string]::IsNullOrWhiteSpace($Health.RootMountOptions)) {
+            Write-Status -Level "INFO" -Message "Mount / $($Health.Name): $($Health.RootMountOptions)"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Health.CacheSizes)) {
+            Write-Status -Level "INFO" -Message "Tamanhos de cache $($Health.Name): $($Health.CacheSizes)"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Health.TopRootDirs)) {
+            Write-Status -Level "INFO" -Message "Maiores diretorios $($Health.Name): $($Health.TopRootDirs)"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Health.FindErrors)) {
+            Write-Status -Level "WARN" -Message "Erros de diretorio $($Health.Name): $($Health.FindErrors)"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Health.DmesgIssues)) {
+            Write-Status -Level "WARN" -Message "Sinais no dmesg $($Health.Name): $($Health.DmesgIssues)"
+        }
+    }
+
+    foreach ($line in @($Health.Stderr)) {
+        $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
+            Write-Status -Level "WARN" -Message "Saude $($Health.Name): $cleanLine"
+        }
+    }
+}
+
+function Get-DistroHealthGateIssues {
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Health,
+
+        [Parameter(Mandatory)]
+        [ValidateSet("Basic", "Standard", "Template")]
+        [string]$QualityGate
+    )
+
+    $issues = @()
+
+    if ($Health.WslCommandExitCode -ne 0) {
+        $issues += "nao respondeu ao comando de saude"
+    }
+
+    if ($QualityGate -in @("Standard", "Template")) {
+        if ($Health.RootReadOnly) {
+            $issues += "filesystem raiz read-only"
+        }
+
+        if (-not $Health.TmpWritable) {
+            $issues += "/tmp sem escrita"
+        }
+
+        if (-not $Health.HomeWritable) {
+            $issues += "`$HOME sem escrita"
+        }
+
+        if ($Health.FindErrorCount -gt 0) {
+            $issues += "$($Health.FindErrorCount) erro(s) ao varrer diretorios"
+        }
+
+        if ($Health.RootUsedPercent -ge 95) {
+            $issues += "uso de disco critico ($($Health.RootUsedPercent)%)"
+        }
+
+        if ($Health.InodeUsedPercent -ge 95) {
+            $issues += "uso de inodes critico ($($Health.InodeUsedPercent)%)"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Health.DmesgIssues)) {
+            $issues += "dmesg indica possivel erro real de filesystem"
+        }
+    }
+
+    if ($QualityGate -eq "Template") {
+        if ($Health.TemporarySockets -gt 0) {
+            $issues += "$($Health.TemporarySockets) socket(s) temporario(s)"
+        }
+
+        if ($Health.AllSockets -gt 0) {
+            $issues += "$($Health.AllSockets) socket(s) total(is) no filesystem"
+        }
+
+        if ($Health.RootUsedPercent -ge 90) {
+            $issues += "uso de disco alto para template ($($Health.RootUsedPercent)%)"
+        }
+
+        if ($Health.InodeUsedPercent -ge 90) {
+            $issues += "uso de inodes alto para template ($($Health.InodeUsedPercent)%)"
+        }
+    }
+
+    return @($issues)
+}
+
+function Assert-DistroHealthGate {
+    param(
+        [array]$HealthResults,
+
+        [Parameter(Mandatory)]
+        [ValidateSet("Basic", "Standard", "Template")]
+        [string]$QualityGate
+    )
+
+    if ($QualityGate -eq "Basic") {
+        Write-Status -Level "INFO" -Message "QualityGate Basic: diagnostico informativo, sem bloqueio por avisos."
+        return
+    }
+
+    $allIssues = @()
+
+    foreach ($health in @($HealthResults)) {
+        $issues = Get-DistroHealthGateIssues `
+            -Health $health `
+            -QualityGate $QualityGate
+
+        foreach ($issue in $issues) {
+            $allIssues += "$($health.Name): $issue"
+        }
+    }
+
+    if ($allIssues.Count -eq 0) {
+        Write-Status -Level "OK" -Message "QualityGate $QualityGate aprovado para as distros avaliadas."
+        return
+    }
+
+    foreach ($issue in $allIssues) {
+        Write-Status -Level "ERROR" -Message "QualityGate ${QualityGate}: $issue"
+    }
+
+    throw "QualityGate $QualityGate reprovado. Corrija os itens acima ou rode com -QualityGate Basic para apenas relatar."
+}
+
+function Clear-WslDistroSockets {
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Distro
+    )
+
+    $command = @'
+tmp_before=$(find /tmp -xdev -type s 2>/dev/null | wc -l | tr -d " ")
+var_tmp_before=$(find /var/tmp -xdev -type s 2>/dev/null | wc -l | tr -d " ")
+ssh_before=0
+for agent_dir in /home/*/.ssh/agent /root/.ssh/agent "$HOME/.ssh/agent"; do
+  if [ -d "$agent_dir" ]; then
+    count=$(find "$agent_dir" -type s 2>/dev/null | wc -l | tr -d " ")
+    ssh_before=$((ssh_before + count))
+  fi
+done
+find /tmp -xdev -type s -delete 2>/dev/null || true
+find /var/tmp -xdev -type s -delete 2>/dev/null || true
+for agent_dir in /home/*/.ssh/agent /root/.ssh/agent "$HOME/.ssh/agent"; do
+  if [ -d "$agent_dir" ]; then
+    find "$agent_dir" -type s -delete 2>/dev/null || true
+  fi
+done
+tmp_after=$(find /tmp -xdev -type s 2>/dev/null | wc -l | tr -d " ")
+var_tmp_after=$(find /var/tmp -xdev -type s 2>/dev/null | wc -l | tr -d " ")
+ssh_after=0
+for agent_dir in /home/*/.ssh/agent /root/.ssh/agent "$HOME/.ssh/agent"; do
+  if [ -d "$agent_dir" ]; then
+    count=$(find "$agent_dir" -type s 2>/dev/null | wc -l | tr -d " ")
+    ssh_after=$((ssh_after + count))
+  fi
+done
+printf 'TMP_BEFORE=%s\n' "${tmp_before:-0}"
+printf 'VAR_TMP_BEFORE=%s\n' "${var_tmp_before:-0}"
+printf 'SSH_BEFORE=%s\n' "${ssh_before:-0}"
+printf 'TMP_AFTER=%s\n' "${tmp_after:-0}"
+printf 'VAR_TMP_AFTER=%s\n' "${var_tmp_after:-0}"
+printf 'SSH_AFTER=%s\n' "${ssh_after:-0}"
+'@
+
+    $result = Invoke-WslDistroCommand -DistroName $Distro.Name -Command $command -User "root"
+    $map = Convert-KeyValueLines -Lines $result.Stdout
+
+    $before = (ConvertTo-Int64Default -Value $map["TMP_BEFORE"]) +
+        (ConvertTo-Int64Default -Value $map["VAR_TMP_BEFORE"]) +
+        (ConvertTo-Int64Default -Value $map["SSH_BEFORE"])
+
+    $after = (ConvertTo-Int64Default -Value $map["TMP_AFTER"]) +
+        (ConvertTo-Int64Default -Value $map["VAR_TMP_AFTER"]) +
+        (ConvertTo-Int64Default -Value $map["SSH_AFTER"])
+
+    $removed = [Math]::Max(0, $before - $after)
+
+    if ($result.ExitCode -eq 0) {
+        Write-Status -Level "OK" -Message (
+            "Limpeza $($Distro.Name): $removed socket(s) temporario(s) removido(s)."
+        )
+    }
+    else {
+        Write-Status -Level "WARN" -Message (
+            "Limpeza $($Distro.Name): comando retornou codigo $($result.ExitCode). Backup continuara."
+        )
+    }
+
+    foreach ($line in @($result.Stderr)) {
+        $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
+            Write-Status -Level "WARN" -Message "Limpeza $($Distro.Name): $cleanLine"
+        }
+    }
+
+    return [PSCustomObject]@{
+        Name       = $Distro.Name
+        Before     = [Int64]$before
+        After      = [Int64]$after
+        Removed    = [Int64]$removed
+        ExitCode   = [int]$result.ExitCode
+        Status     = if ($result.ExitCode -eq 0) { "OK" } else { "WARN" }
+    }
+}
+
+function Invoke-WslDistroTemplatePurify {
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Distro
+    )
+
+    Write-Status -Level "INFO" -Message "Purificando distro para template: $($Distro.Name)"
+
+    $cleanup = Clear-WslDistroSockets -Distro $Distro
+
+    $command = @'
+journal_status="not-found"
+if command -v journalctl >/dev/null 2>&1; then
+  journal_status="attempted"
+  journalctl --rotate >/dev/null 2>&1 || true
+  journalctl --vacuum-time=7d >/dev/null 2>&1 || true
+fi
+sync
+printf 'JOURNAL_STATUS=%s\n' "$journal_status"
+'@
+
+    $result = Invoke-WslDistroCommand -DistroName $Distro.Name -Command $command -User "root"
+    $map = Convert-KeyValueLines -Lines $result.Stdout
+    $journalStatus = [string]$map["JOURNAL_STATUS"]
+
+    if ([string]::IsNullOrWhiteSpace($journalStatus)) {
+        $journalStatus = "unknown"
+    }
+
+    if ($result.ExitCode -eq 0) {
+        Write-Status -Level "OK" -Message (
+            "Purificacao $($Distro.Name): sockets removidos=$($cleanup.Removed), journal=$journalStatus."
+        )
+    }
+    else {
+        Write-Status -Level "WARN" -Message (
+            "Purificacao $($Distro.Name): comando extra retornou codigo $($result.ExitCode)."
+        )
+    }
+
+    foreach ($line in @($result.Stderr)) {
+        $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
+            Write-Status -Level "WARN" -Message "Purificacao $($Distro.Name): $cleanLine"
+        }
+    }
+
+    return [PSCustomObject]@{
+        Name          = $Distro.Name
+        SocketsBefore = [Int64]$cleanup.Before
+        SocketsAfter  = [Int64]$cleanup.After
+        Removed       = [Int64]$cleanup.Removed
+        Journal       = $journalStatus
+        ExitCode      = [int]$result.ExitCode
+        Status        = if ($result.ExitCode -eq 0 -and $cleanup.ExitCode -eq 0) { "OK" } else { "WARN" }
+    }
+}
+
 function Get-WslDistroRegistryInfo {
     $baseKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss"
 
@@ -616,16 +1235,31 @@ function Export-WslDistro {
 
     Write-Status -Level "INFO" -Message "Exportando distro: $($Distro.Name)"
 
-    $exportOutput = & wsl.exe --export $Distro.Name $partialTar 2>&1
+    $exportStdout = "$partialTar.stdout.log"
+    $exportStderr = "$partialTar.stderr.log"
+
+    Remove-Item -LiteralPath $exportStdout, $exportStderr -Force -ErrorAction SilentlyContinue
+
+    & wsl.exe --export $Distro.Name $partialTar 1>$exportStdout 2>$exportStderr
     $exportExitCode = $LASTEXITCODE
 
-    foreach ($line in @($exportOutput)) {
+    foreach ($line in @(Get-Content -LiteralPath $exportStdout -ErrorAction SilentlyContinue)) {
         $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
 
         if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
             Write-Status -Level "INFO" -Message "wsl export: $cleanLine"
         }
     }
+
+    foreach ($line in @(Get-Content -LiteralPath $exportStderr -ErrorAction SilentlyContinue)) {
+        $cleanLine = ([string]$line).Replace([string][char]0, "").Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($cleanLine)) {
+            Write-Status -Level "WARN" -Message "wsl export: $cleanLine"
+        }
+    }
+
+    Remove-Item -LiteralPath $exportStdout, $exportStderr -Force -ErrorAction SilentlyContinue
 
     if ($exportExitCode -ne 0) {
         if (Test-Path -LiteralPath $partialTar) {
@@ -874,6 +1508,7 @@ function Write-RestoreGuide {
         "1. Execute: wsl.exe --shutdown",
         "2. Confira os hashes em checksums.sha256.",
         "3. Nao importe uma distro com nome ja existente.",
+        "4. Cada TAR tambem pode ser usado como template para criar clones.",
         "",
         "COMANDOS PARA RESTAURAR AS DISTROS:"
     )
@@ -886,12 +1521,21 @@ function Write-RestoreGuide {
         foreach ($distro in $Distros) {
             $targetName = Get-SafeFileName -Name $distro.Name
             $targetPath = "D:\WSL-Restored\$targetName"
+            $cloneName = "$($distro.Name)-clone"
+            $clonePath = "D:\WSL-Restored\$targetName-clone"
             $tarPath = Join-Path $FinalRunPath $distro.File
 
             $lines += ""
+            $lines += "Restaurar com o mesmo nome:"
             $lines += (
                 "wsl.exe --import `"$($distro.Name)`" " +
                 "`"$targetPath`" " +
+                "`"$tarPath`" --version 2"
+            )
+            $lines += "Usar como template/clone:"
+            $lines += (
+                "wsl.exe --import `"$cloneName`" " +
+                "`"$clonePath`" " +
                 "`"$tarPath`" --version 2"
             )
         }
@@ -926,6 +1570,10 @@ function Write-Manifest {
 
         [array]$SkippedDistros,
 
+        [array]$DistroHealth,
+
+        [array]$CleanupResults,
+
         [Parameter(Mandatory)]
         [PSCustomObject]$Estimate,
 
@@ -958,9 +1606,14 @@ function Write-Manifest {
 
         Options = @{
             BackupMode        = $Config.BackupMode
+            QualityGate       = $Config.QualityGate
             HashAlgorithm     = $Config.HashAlgorithm
             IncludeDocker     = $Config.IncludeDocker
             SkipVhdx          = $Config.SkipVhdx
+            CleanWslSockets   = $Config.CleanWslSockets
+            PurifyOnly        = $Config.PurifyOnly
+            HealthOnly        = $Config.HealthOnly
+            DeepHealth        = $Config.DeepHealth
             AutoResume        = $Config.AutoResume
             SourceVhdx        = $Config.SourceVhdx
             KeepLastRuns      = $Config.KeepLastRuns
@@ -970,6 +1623,8 @@ function Write-Manifest {
         Estimate       = $Estimate
         Distros        = $Distros
         SkippedDistros = $SkippedDistros
+        DistroHealth   = $DistroHealth
+        CleanupResults = $CleanupResults
         Vhdx           = $Vhdx
     }
 
@@ -1126,6 +1781,8 @@ function Write-ResumeState {
         BackupMode          = $Config.BackupMode
         UpdatedAt           = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         IncludeDocker       = $Config.IncludeDocker
+        CleanWslSockets     = $Config.CleanWslSockets
+        DeepHealth          = $Config.DeepHealth
         WillBackupExtraVhdx = $WillBackupExtraVhdx
         SourceVhdx          = $Config.SourceVhdx
         SelectedDistros     = @($SelectedDistros | Select-Object -ExpandProperty Name)
@@ -1156,6 +1813,9 @@ $stageRoot = $null
 $finalRunPath = $null
 $backupCompleted = $false
 $resumingExistingStage = $false
+$distroHealth = @()
+$cleanupResults = @()
+$templatePurifiedBeforeHealth = $false
 
 try {
     Write-Section "MEGA BACKUP WSL - SEGURO E VERSIONADO"
@@ -1213,7 +1873,7 @@ try {
         }
     }
 
-    if (-not $DryRun.IsPresent -and $Config.AutoResume) {
+    if (-not $DryRun.IsPresent -and -not $HealthOnly.IsPresent -and -not $PurifyOnly.IsPresent -and $Config.AutoResume) {
         $resumeStage = Find-ResumeStage `
             -StagingRoot $stagingRoot `
             -BackupMode $Config.BackupMode `
@@ -1234,7 +1894,12 @@ try {
 
     Write-Status -Level "TITLE" -Message "ID da execucao: $script:RunId"
     Write-Status -Level "INFO" -Message "Modo de backup: $($Config.BackupMode)"
+    Write-Status -Level "INFO" -Message "QualityGate: $($Config.QualityGate)"
     Write-Status -Level "INFO" -Message "Retomada automatica: $($Config.AutoResume)"
+    Write-Status -Level "INFO" -Message "HealthOnly: $($Config.HealthOnly)"
+    Write-Status -Level "INFO" -Message "DeepHealth: $($Config.DeepHealth)"
+    Write-Status -Level "INFO" -Message "Limpeza de sockets: $($Config.CleanWslSockets)"
+    Write-Status -Level "INFO" -Message "PurifyOnly: $($Config.PurifyOnly)"
     if ($resumingExistingStage) {
         Write-Status -Level "WARN" -Message "Retomando staging existente: $stageRoot"
     }
@@ -1286,6 +1951,38 @@ try {
         foreach ($distro in $skippedDistros) {
             Write-Status -Level "WARN" -Message "Distro ignorada: $($distro.Name) ($($distro.Reason))"
         }
+
+        if (
+            $Config.PurifyOnly -or
+            (
+                $Config.QualityGate -eq "Template" -and
+                -not $HealthOnly.IsPresent -and
+                -not $DryRun.IsPresent
+            )
+        ) {
+            Write-Section "PURIFICAR DISTROS PARA TEMPLATE"
+
+            foreach ($distro in $selectedDistros) {
+                $cleanupResults += Invoke-WslDistroTemplatePurify -Distro $distro
+            }
+
+            $templatePurifiedBeforeHealth = $true
+        }
+
+        Write-Section "SAUDE DAS DISTROS"
+
+        foreach ($distro in $selectedDistros) {
+            $health = Get-WslDistroHealth `
+                -Distro $distro `
+                -Deep:([bool]$Config.DeepHealth)
+
+            $distroHealth += $health
+            Write-DistroHealth -Health $health
+        }
+
+        Assert-DistroHealthGate `
+            -HealthResults $distroHealth `
+            -QualityGate $Config.QualityGate
     }
     else {
         Write-Status -Level "WARN" -Message "Modo VHDX: inventario de distros ignorado."
@@ -1337,7 +2034,17 @@ try {
         -MinimumBytes ([Int64]$estimate.TotalBytes) `
         -Context "backup completo estimado"
 
-    if ($DryRun.IsPresent) {
+    if ($PurifyOnly.IsPresent) {
+        Write-Section "PURIFICACAO CONCLUIDA"
+        Write-Status -Level "OK" -Message "PurifyOnly ativo: distros purificadas e diagnosticadas. Nenhum backup foi exportado, copiado ou publicado."
+        $backupCompleted = $true
+    }
+    elseif ($HealthOnly.IsPresent) {
+        Write-Section "DIAGNOSTICO CONCLUIDO"
+        Write-Status -Level "OK" -Message "HealthOnly ativo: nenhum backup foi exportado, copiado ou publicado."
+        $backupCompleted = $true
+    }
+    elseif ($DryRun.IsPresent) {
         Write-Section "MODO TESTE"
         Write-Status -Level "WARN" -Message "DryRun ativo: nenhuma distro sera exportada e nenhum VHDX sera copiado."
         Write-Status -Level "OK" -Message "Pre-validacoes e inventario concluidos com sucesso."
@@ -1363,6 +2070,20 @@ try {
             -StageRoot $stageRoot `
             -SelectedDistros $selectedDistros `
             -WillBackupExtraVhdx $willBackupExtraVhdx
+
+        if ($needsDistros -and $Config.CleanWslSockets -and -not $templatePurifiedBeforeHealth) {
+            Write-Section "PREPARAR DISTROS PARA BACKUP/TEMPLATE"
+
+            foreach ($distro in $selectedDistros) {
+                $cleanupResults += Clear-WslDistroSockets -Distro $distro
+            }
+        }
+        elseif ($templatePurifiedBeforeHealth) {
+            Write-Status -Level "INFO" -Message "Purificacao de template ja executada antes do diagnostico."
+        }
+        elseif ($needsDistros) {
+            Write-Status -Level "INFO" -Message "Limpeza de sockets nao solicitada. Use -CleanWslSockets para preparar as distros antes do export."
+        }
 
         Write-Section "ETAPA 1 DE 4 - DESLIGAR WSL"
         Stop-Wsl
@@ -1426,6 +2147,8 @@ try {
             -DriveInfo $driveInfo `
             -Distros $distroResults `
             -SkippedDistros $skippedDistros `
+            -DistroHealth $distroHealth `
+            -CleanupResults $cleanupResults `
             -Estimate $estimate `
             -Vhdx $vhdxResult
 
